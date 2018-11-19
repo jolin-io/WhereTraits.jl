@@ -1,13 +1,14 @@
 name = "Traits"
 uuid = "5060dc80-e054-11e8-0acc-1dc6592f659e"
 authors = ["Sahm Stephan <s.sahm@reply.de>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 
 [extras]
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
 
 [targets]
-test = ["Test", "Suppressor"]
+test = ["Test", "Suppressor", "StringDistances"]

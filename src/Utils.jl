@@ -1,5 +1,5 @@
 module Utils
-export parametersof, selfproduct, where
+export parametersof, parametersofmethod, firstparameterof, selfproduct, chain, where, invoke_method
 using Base.Iterators
 
 # Types
@@ -16,9 +16,22 @@ never use `.parameters` again
 Base.@pure parametersof(t::Type) = Tuple{t.parameters...}
 
 # alternativ implementation using generated functions
-# @generated function getParameters(t::Type)
+# @generated function parametersof(t::Type)
 #   :($(Tuple{t.parameters[1].parameters...}))
 # end
+
+
+"""
+similar helper like `parametersof`
+
+especially for working with method signatures where first parameter element needs to be ignored
+"""
+Base.@pure parametersofmethod(m::Method) = Base.rewrap_unionall(Tuple{Base.unwrap_unionall(m.sig).parameters[2:end]...}, m.sig)
+# TODO make this pure again if possible. Like reimplementing rewrap_unionall and unwrap_unionall
+
+
+Base.@pure firstparameterof(t::Type) = t.parameters[1]
+
 
 
 function where(e, ts...)
@@ -28,6 +41,12 @@ function where(e, ts...)
   e
 end
 
+
+function invoke_method(m::Method, args...; kwargs...)
+  invoke(m.sig.parameters[1].instance, parametersofmethod(m), args...; kwargs...)
+end
+
+
 # Iterators
 # =========
 
@@ -35,5 +54,7 @@ end
 # the nested tuple output of Iterators.product
 # into a linearly iterable n-dim array
 selfproduct(itr, n::Int) = collect(product((itr for i in 1:n)...))
+
+chain(itr...) = flatten(itr)
 
 end  # module
