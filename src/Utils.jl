@@ -1,38 +1,33 @@
 module Utils
-export parametersof, parametersofmethod, firstparameterof, selfproduct, chain, where, invoke_method
+export parametersof, selfproduct, chain,
+  where, invoke_method, normalize_parametrictype, supertypes, hasnotypeparameters
 using Base.Iterators
 
 # Types
 # =====
 
-# this seems valid application of @pure
-# see https://discourse.julialang.org/t/is-this-a-valid-pure-function/17577
-"""
-    parametersof(Dict{String, Int}) = Tuple{String, Int}
-
-extract type parameters like ``f(t::Type) = t.parameters`` however with inference support
-never use `.parameters` again
-"""
-Base.@pure parametersof(t::Type) = Tuple{t.parameters...}
-
-# alternativ implementation using generated functions
-# @generated function parametersof(t::Type)
-#   :($(Tuple{t.parameters[1].parameters...}))
-# end
+parametersof(::Type{T}) where T = Base.unwrap_unionall(T).parameters
 
 
-"""
-similar helper like `parametersof`
 
-especially for working with method signatures where first parameter element needs to be ignored
-"""
-Base.@pure parametersofmethod(m::Method) = Base.rewrap_unionall(Tuple{Base.unwrap_unionall(m.sig).parameters[2:end]...}, m.sig)
-# TODO make this pure again if possible. Like reimplementing rewrap_unionall and unwrap_unionall
+function normalize_parametrictype(::Type{T}) where T
+  PlainT = Base.unwrap_unionall(T)
+  getfield(PlainT.name.module, PlainT.name.name)
+end
 
+function supertypes(::Type{T}) where T
+  tps = []
+  i = T
+  while i !== Any
+    push!(tps, i)
+    i = supertype(i)
+  end
+  tuple(tps...)
+end
 
-Base.@pure firstparameterof(t::Type) = t.parameters[1]
-
-
+function hasnotypeparameters(::Type{T}) where T
+  length(Base.unwrap_unionall(T).parameters) == 0
+end
 
 function where(e, ts...)
   for t ∈ ts

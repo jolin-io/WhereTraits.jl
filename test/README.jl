@@ -1,6 +1,8 @@
 using Suppressor
 using StringDistances  # TODO make this a submodule for test only
 
+refixate_traitsof()
+
 # Test README.md example
 # ======================
 
@@ -35,4 +37,6 @@ out2 = @capture_out begin
 end
 
 # string distance should be small
-@test evaluate(Levenshtein(), "New York", "New Yorks") <= 10
+@test evaluate(Levenshtein(), out1, out2) <= 10
+# println(out1)
+# println(out2)
