@@ -1,30 +1,49 @@
 module Traits
-export @init_traitsof, TypeLowerBound, TypeLB, Constrain1, Constrain2, Constrain3
+export @traitsof_init, TypeLowerBound, TypeLB, Constrain, Constrain1, Constrain2, Constrain3, Traitsof, @traitsof_link
+
+# TODO think about supporting traits for Union types, like Union{Int, Nothing} or Union{Double, Missing}
 
 # Traits.functions needs to be accessed qualified, i.e. Traits.functions
 include("Utils.jl")
 include("BasicTraits.jl")
 using .Utils
+using Base.Iterators
 
+"""
+all subtypes should implement the following fields:
+```julia
+type::Type{Tuple{T1, T2, T3, ..., TN}}
+parameter_constraints::Tuple
+```
+where `length(parameter_constraints) == length(type.parameters)`, i.e. one constraint per Type T
+
+Each constraint, is just a Union of traits which you the parameter to fulfil.
+If there is no constraint required use `Union{}`
+"""
+abstract type Constrain{N} end
 """
 support complex dependencies on typeparameters for a single type
 """
-struct Constrain1{T}
-  type::Type{T}
+struct Constrain1{T} <: Constrain{1}
+  type::Type{Tuple{T}}
+  # we would need typeof() instead of Type{} because tuple(Dict) isa Tuple{typeof(Dict)} but not a Tuple{Type{Dict}}
+  # however typeof(T) gives TypeVar as this apparently is evaluated at an earlier stage
+  # hence no types support
+  # types::Tuple{typeof(T)}
   parameter_constraints::Tuple
 
   function Constrain1{T}(parameter_constraints...) where T
     if length(parametersof(T)) != length(parameter_constraints)
       error("need exactly as many parameter trait specifications as type ``$T`` has parameters")
     end
-    new{T}(T, parameter_constraints)
+    new{T}(Tuple{T}, parameter_constraints)
   end
 end
 
 """
 support complex dependencies on typeparameters for two types
 """
-struct Constrain2{T1, T2}
+struct Constrain2{T1, T2} <: Constrain{2}
   type::Type{Tuple{T1, T2}}
   parameter_constraints::Tuple
 
@@ -39,7 +58,7 @@ end
 """
 support complex dependencies on typeparameters for three types
 """
-struct Constrain3{T1, T2, T3}
+struct Constrain3{T1, T2, T3} <: Constrain{3}
   type::Type{Tuple{T1, T2, T3}}
   parameter_constraints::Tuple
 
@@ -81,16 +100,155 @@ _functions_isfunction(f) = [f.instance]  # ``fieldnames`` don't work here, but `
 """
     TypeLowerBound(type_lower_bound) = Type{T} where type_lower_bound <: T <: Any
 
-short ``TypeLB``
+short ``TypeLB``.
 
 # Examples
 ```jldoctest
 julia> TypeLB(Union{Integer, String})
 Type{T} where T>:Union{Integer, String}
 ```
+for convenience also the following works
+```jldoctest
+julia> TypeLB(Integer, String)
+Type{T} where T>:Union{Integer, String}
+```
 """
 TypeLowerBound(::Type{LB}) where LB = Type{>:LB}
+TypeLowerBound(::Type{A}, ::Type{B}) where A where B = Type{>:Union{A, B}}
+TypeLowerBound(::Type{A}, ::Type{B}, ::Type{C}) where A where B where C = Type{>:Union{A, B, C}}
+TypeLowerBound(::Type{A}, ::Type{B}, ::Type{C}, ::Type{D}) where A where B where C where D = Type{>:Union{A, B, C, D}}
+TypeLowerBound(::Type{A}, ::Type{B}, ::Type{C}, ::Type{D}, ::Type{E}) where A where B where C where D where E = Type{>:Union{A, B, C, D, E}}
 TypeLB = TypeLowerBound
+
+
+
+"""
+abstract super type for traitsof functions to enable easier dispatching
+
+Think Traitsof as a struct type with the following properties:
+  ...TODO copy struct type signature
+
+It is not a struct itself, because we want to be able to overwrite the function call
+  syntax of each single traitsof instance, which requires subtyping.
+"""
+abstract type Traitsof end
+
+Base.iterate(x::Traitsof) = (x, nothing)
+Base.iterate(x::Traitsof, ::Any) = nothing
+
+Base.getindex(traitsof::Traitsof, args...) = traitsof(args...)
+
+function Base.setindex!(traitsof::Traitsof, ::Type{Value}, types::Vararg{Type, N}) where Value where N
+  if all(Traits.hasnotypeparameters.(types))
+    traitsof.notypeparams[N][types] = Union{Value, traitsof.notypeparams[N][types]}
+  else
+    types_normalized = Traits.normalize_parametrictype.(types)
+    # create empty subdict if not existing
+    subdict = get!(traitsof.typeparams[N], types_normalized)
+    v = subdict[types]
+    Base.setindex!(subdict, Union{Value, v}, types)
+    subdict[types] = Union{Value, subdict[types]}
+  end
+end
+
+function Base.setindex!(traitsof::Traitsof, ::Type{Value}, c::Constrain{N}) where Value where N
+  types_normalized = Traits.normalize_parametrictype.(tuple(c.type.parameters...))
+  # create empty subdict if not existing
+  subdict = get!(traitsof.typeparams[N], types_normalized)
+  subdict[c] = Union{Value, subdict[c]}
+end
+
+
+"""
+generic function to call traitsof
+
+this is used internally to construct the generated functions for traitsof
+"""
+function call_traitsof(traitsof::Traitsof, types::NTuple{N, Type}) where N
+  @assert all(isconcretetype.(types)) "calling traitsof() only supports concrete types"
+
+  type = Tuple{types...}
+  types_parameters = Base.Iterators.flatten(Traits.parametersof.(types))
+
+  # include traits from parent_functions
+  u::Type = Union{(fn(types...) for fn ∈ traitsof.parent_functions)...}
+
+  # we go through all possible combinations of supertypes
+  for supertypes ∈ Iterators.product(Traits.supertypes.(types)...)  # Traits.supertypes includes the type itself
+    if all(Traits.hasnotypeparameters(st) for st ∈ supertypes) # this is short-cycling
+      u = Union{u, traitsof.notypeparams[N][supertypes]} # we have the guarantee that this is a supertype
+    else
+      supertypes_normalized = Traits.normalize_parametrictype.(supertypes)
+      # for traitsof(type with typeparams) also include all ancestors_traitsof and their parents_traitsof and so on
+      all_typeparams = flatten(trof.typeparams[N][supertypes_normalized] for trof in chain(traitsof, traitsof.ancestors_traitsof))
+      for (key, value) ∈ all_typeparams
+        if key isa Traits.Constrain{N}
+          if type <: key.type && all(traitsrequire <: traitsof(param)
+              for (param, traitsrequire) ∈ zip(types_parameters, key.parameter_constraints)
+              if param isa Type)  # also values can be used as typeparameters as in Array{Int, 1}, however we don't have traits for values, but only for types
+            u = Union{u, value}
+          end
+        else
+          # if key is not a Constrain, then key can still be a Tuple of specific UnionAll types which may match or not
+          # we first need to construct a TupleType from the Tuple key to easily check the inheritage
+          if type <: Tuple{key...}
+            u = Union{u, value}
+          end
+        end
+      end
+    end
+  end
+  u
+end
+
+
+"""
+binds a functions that expects Traitsof as first argument to the current traitsof
+
+general recommendation how to link specific functions to the module's own traitsof function:
+
+use as:
+```
+@traitsof_link OtherModule.function_expecting_traitsof_as_first_argument
+
+@traitsof_link begin
+  OtherModule.funcA
+  OtherModule.funcB
+end
+
+@traitsof_link OtherModule begin
+  funcA
+  funcB
+end
+```
+"""
+macro traitsof_link(func)
+  if func.head == :block
+    funcs = filter(func.args) do expr
+      expr isa Union{Expr, Symbol, QuoteNode}
+    end
+    Expr(:block, single_traitsof_link.(funcs)...)
+  else
+    single_traitsof_link(func)
+  end
+end
+macro traitsof_link(mod, funcs)
+  @assert funcs.head == :block
+  funcs = filter(funcs.args) do expr
+    expr isa Union{Expr, Symbol, QuoteNode}
+  end
+  funcs = [merge_module_attr(mod, f) for f in funcs]
+  Expr(:block, single_traitsof_link.(funcs)...)
+end
+
+
+function single_traitsof_link(func)
+  funcname = extract_name(func)
+  esc(quote
+    $funcname(args...; kwargs...) = $func(traitsof, args...; kwargs...)
+  end)
+end
+
 
 
 
@@ -103,30 +261,24 @@ Still, by adding certain traits you can break others code.
 
 With your own traitsof definition, such problems are all fixed.
 """
-macro init_traitsof(other_traitsof_functions...)
-  # because we use nested quotes the only way for hygiene seems to be to do it manual
-  @gensym dict_traitsof1 dict_traitsof1_typeparams
-  @gensym TypeTuple2 dict_traitsof2 dict_traitsof2_typeparams
-  @gensym TypeTuple3 dict_traitsof3 dict_traitsof3_typeparams
+macro traitsof_init(parent_functions...)
 
-  dict_traitsof1 = :dict_traitsof1
-  dict_traitsof1_typeparams = :dict_traitsof1_typeparams
-  dict_traitsof2 = :dict_traitsof2
-  dict_traitsof2_typeparams = :dict_traitsof2_typeparams
-  dict_traitsof3 = :dict_traitsof3
-  dict_traitsof3_typeparams = :dict_traitsof3_typeparams
+  # we use a hidden symbol for the ConcreteType, as this should be a singleton type
+  # and is only constructed to easily recompile generated functions per package
+  ConcreteTraitsof = :ConcreteTraitsof
 
   esc(quote
     # escape this, as we want to define
     # the traitsof function in the calling environment
 
+    # TODO adapt string representation to present module which it is defined in
     # TODO adapt doc
     """
         traitsof(type)  # query current generated traits for ``type``
         traitsof[type]  # == traitsof(type)
         traitsof[type] = TraitType  # add new ``TraitType`` as a trait to ``type``
 
-        refixate_traitsof()  # regenerate Traits from internal dictionaries
+        traitsof()  # regenerate Traits from internal dictionari_refixatees
 
     Return the trait types of a given Type ``type``. If the type has multiple traits, a Union Type is returned.
 
@@ -137,7 +289,7 @@ macro init_traitsof(other_traitsof_functions...)
     julia> traitsof[Integer] = Union{Integer, String}
     julia> traitsof[Integer]
     julia> Union{}  # traitsof is generated function and hence need to be recompiled to change values
-    julia> refixate_traitsof()  # with this
+    julia> traitsof()  # with th_refixateis
     julia> traitsof[Integer]
     Union{Integer, String}
     julia> traitsof(Integer)  # [] or () - both do the same
@@ -147,204 +299,89 @@ macro init_traitsof(other_traitsof_functions...)
     Union{}
     ```
     """
-    function traitsof end
-
-    # we partition the lookup for traits by 1) arity, and 2) typeparameters
-    # where we create lookup tables for all respective types and unionall types
-
-    # for types without typeparameters we can directly map the type to a respective collection of Traits
-    $dict_traitsof1 = Dict{Type, Type}()
-    # types with typeparameters are looked up in two stages
-    # first as the generalized UnionAll to summarize all different types around that parametric type
-    # second as a concrete mapping of types to traits
-    $dict_traitsof1_typeparams = Dict{UnionAll, Dict{Union{Type, Traits.Constrain1}, Type}}()
-    # same as for arity1
-    # unfortunately it is not possible to construct a TupleType of UnionAll... hence we keep the generic TypeTuple2
-    const $TypeTuple2 = Type{Tuple{T1, T2}} where T1 where T2
-    $dict_traitsof2 = Dict{$TypeTuple2, Type}()
-    $dict_traitsof2_typeparams = Dict{$TypeTuple2, Dict{Union{$TypeTuple2, Traits.Constrain2}, Type}}()
-    # same as for arity2
-    const $TypeTuple3 = Type{Tuple{T1, T2, T3}} where T1 where T2 where T3
-    $dict_traitsof3 = Dict{$TypeTuple3, Type}()
-    $dict_traitsof3_typeparams = Dict{$TypeTuple3, Dict{Union{$TypeTuple3, Traits.Constrain3}, Type}}()
+    struct $ConcreteTraitsof <: Traits.Traitsof
+      parent_functions::Vector{Any}
+      ancestors_traitsof::Vector{Traits.Traitsof}  # recursive
 
 
-    Base.getindex(::typeof(traitsof), args...) = traitsof(args...)
+      # we partition the lookup for traits by 1) arity, and 2) typeparameters
+      # where we create lookup tables for all respective types and unionall types
 
-    function Base.setindex!(::typeof(traitsof), ::Type{Value}, ::Type{Key}) where Value where Key
+      # for types without typeparameters we can directly map the type to a respective collection of Traits
+      notypeparams::Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Type} where N}
+      # types with typeparameters are looked up in two stages
+      # first as the generalized UnionAll to summarize all different types around that parametric type
+      # second as a concrete mapping of types to traits
+      typeparams::Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}} where N}
 
-      if Traits.hasnotypeparameters(Key)
-        $dict_traitsof1[Key] = Union{Value, get($dict_traitsof1, Key, Union{})}
-      else
-        # TODO set empty subdict if necessary
-        subdict = get!($dict_traitsof1_typeparams, Traits.normalize_parametrictype(Key), Dict{Union{Type, Traits.Constrain1}, Type}())
-        subdict[Key] = Union{Value, get(subdict, Key, Union{})}
+      function $ConcreteTraitsof(parent_functions)  # TODO create global parameter for default N?
+        parent_traitsof = [traitsof for traitsof ∈ parent_functions if traitsof isa Traitsof]
+        ancestors_traitsof = [parent_traitsof; (p.ancestors_traitsof for p ∈ parent_traitsof)...]
+
+        # initialize DefaultDicts
+        # always store top dict (there shouldn't be much requests/memory overhead and it simplifies the AP)
+        notypeparams = Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Type} where N}(true) do N
+          # don't store final default type automatically
+          Traits.DefaultDict{NTuple{N, Type}, Type}(false) do _
+            Union{}
+          end
+        end
+        # always store top dict
+        typeparams = Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}} where N}(true) do N
+          # don't always store subdicts, as this will be asked
+          Traits.DefaultDict{NTuple{N, Type}, Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}}(false) do _
+            # don't store final default type automatically
+            Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}(false) do _
+              Union{}
+            end
+          end
+        end
+        new(collect(parent_functions), ancestors_traitsof, notypeparams, typeparams)
       end
     end
-    function Base.setindex!(::typeof(traitsof), ::Type{Value}, c1::Traits.Constrain1{Key}) where Value where Key
-      subdict = get!($dict_traitsof1_typeparams, Traits.normalize_parametrictype(Key), Dict{Union{Type, Traits.Constrain1}, Type}())
-      subdict[c1] = Union{Value, get(subdict, c1, Union{})}
-    end
 
-    function Base.setindex!(::typeof(traitsof), ::Type{Value}, ::Type{Key1}, ::Type{Key2}) where Value where Key1 where Key2
-      Key = Tuple{Key1, Key2}
-      all_keys = (Key1, Key2)
-      if all(Traits.hasnotypeparameters.(all_keys))
-        $dict_traitsof2[Key] = Union{Value, get($dict_traitsof2, Key, Union{})}
-      else
-        Key_normalized = Tuple{Traits.normalize_parametrictype.(all_keys)...}
-        subdict = get!($dict_traitsof2_typeparams, Key_normalized, Dict{Union{$TypeTuple2, Traits.Constrain2}, Type}())
-        subdict[Key] = Union{Value, get(subdict, Key, Union{})}
-      end
-    end
-    function Base.setindex!(::typeof(traitsof), ::Type{Value}, c2::Traits.Constrain2{Key1, Key2}) where Value where Key1 where Key2
-      Key_normalized = Tuple{Traits.normalize_parametrictype.((Key1, Key2))...}
-      subdict = get!($dict_traitsof2_typeparams, Key_normalized, Dict{Union{$TypeTuple2, Traits.Constrain2}, Type}())
-      subdict[c2] = Union{Value, get(subdict, c2, Union{})}
-    end
+    # this should be the only instance of $ConcreteTraitsof
+    # all dispatching is done via the abstract type Traits.Traitsof
+    const traitsof = $ConcreteTraitsof(tuple($(parent_functions...)))
 
-    function Base.setindex!(::typeof(traitsof), ::Type{Value}, ::Type{Key1}, ::Type{Key2}, ::Type{Key3}) where Value where Key1 where Key2 where Key3
-      Key = Tuple{Key1, Key2, Key3}
-      all_keys = (Key1, Key2, Key3)
-      if all(Traits.hasnotypeparameters.(all_keys))
-        $dict_traitsof3[Key] = Union{Value, get($dict_traitsof3, Key, Union{})}
-      else
-        Key_normalized = Tuple{Traits.normalize_parametrictype.(all_keys)...}
-        subdict = get!($dict_traitsof3_typeparams, Key_normalized, Dict{Union{$TypeTuple3, Traits.Constrain3}, Type}())
-        subdict[Key] = Union{Value, get(subdict, Key, Union{})}
-      end
-    end
-    function Base.setindex!(::typeof(traitsof), ::Type{Value}, c3::Traits.Constrain3{Key1, Key2, Key3}) where Value where Key1 where Key2 where Key3
-      Key_normalized = Tuple{Traits.normalize_parametrictype.((Key1, Key2, Key3))...}
-      subdict = get!($dict_traitsof3_typeparams, Key_normalized, Dict{Union{$TypeTuple3, Traits.Constrain3}, Type}())
-      subdict[c3] = Union{Value, get(subdict, c3, Union{})}
-    end
 
-    #This is not a macro because it always changes the traitsof definition
+    # This is not a macro because it has to change always the same traitsof definition
     # which was defined by the same ``@init_traitsof`` macro call
-    # which also created this function.
     """
-        refixate_traitsof()
+        traitsof_refixate()
 
     reset the generated code of traitsof
     hence subsequent calls of ``traitsof(...)``  will include all recent
-    additions to ``traitsof`` (like ``traitsof[type] = traittype``)
+    additions to ``traitsof`` (like ``traitsof[type] = MyNewTraitType``)
     """
-    refixate_traitsof() = eval(quote
-      @generated function traitsof(::Type{T}) where T
-        @assert isconcretetype(T) "calling traitsof() only supports concrete types"
-        parametersofT = Traits.parametersof(T)
-        # include traits from other_traitsof_functions
-        u = Union{$((Expr(:call, fn, :T) for fn ∈ $other_traitsof_functions)...)}
-
-        # union all traits of any parent
-        for key ∈ Traits.supertypes(T)  # includes T itself
-          if Traits.hasnotypeparameters(key)
-            u = Union{u, get($$dict_traitsof1, key, Union{})} # we have the guarantee that this is a supertype
-          else
-            # TODO check whether subdict exists at all
-            key_normalized = Traits.normalize_parametrictype(key)
-            if haskey($$dict_traitsof1_typeparams, key_normalized)
-              for (subkey, value) ∈ $$dict_traitsof1_typeparams[key_normalized]
-                if subkey isa Traits.Constrain1
-                  if T <: subkey.type && all(traitsrequire <: traitsof(p)
-                      for (p, traitsrequire) ∈ zip(parametersofT, subkey.parameter_constraints)
-                      if p isa Type)  # also values can be used as typeparameters as in Array{Int, 1}, however we don't have traits for values, but only for types
-                    u = Union{u, value}
-                  end
-                else
-                  if T <: subkey
-                    u = Union{u, value}
-                  end
-                end
-              end
-            end
+    function traitsof_refixate()
+      maxN = 3  # TODO change to global config parameter
+      # we need to go through different arities manually to be able to use generated functions while extracting type information
+      for N in 1:maxN
+        typenames = Symbol.(:T, 1:N)
+        args = [:(_::Type{$tn}) for tn in typenames]
+        # we have to ignore the given traitsof object in the functionhead because this is a generated function,
+        # i.e. we only get the Type and not the object itself
+        # luckily this traitsof is uniquely defined and already directly referencable
+        functionhead = Traits.where(:((::typeof(traitsof))($(args...))), typenames...)  # $$ConcreteTraitsof
+        eval(quote
+          # got parse error when using function $functionhead instead
+          # luckily the second function syntax works
+          @generated $functionhead = begin
+            traits = Traits.call_traitsof($traitsof, tuple($(typenames...)))
+            :($traits)
           end
-        end
-        :($u)
+        end)
       end
-
-
-      @generated function traitsof(::Type{T1}, ::Type{T2}) where T1 where T2
-        types = (T1, T2)
-        @assert all(isconcretetype.(types)) "calling traitsof() only supports concrete types"
-        type = Tuple{T1, T2}
-        type_parameters = Base.Iterators.flatten(Traits.parametersof.(types))
-        # include traits from other_traitsof_functions
-        u = Union{$((Expr(:call, fn, :T1, :T2) for fn ∈ $other_traitsof_functions)...)}
-
-        # we go through all parent types
-        for STs ∈ Iterators.product(Traits.supertypes.(types)...)
-          # ST1, ST2 = STs
-          key = Tuple{STs...}
-          if all(Traits.hasnotypeparameters(st) for st ∈ STs) # this is short cycling
-            u = Union{u, get($$dict_traitsof2, key, Union{})} # we have the guarantee that this is a supertype
-          else
-            key_normalized = Tuple{Traits.normalize_parametrictype.(STs)...}
-            if haskey($$dict_traitsof2_typeparams, key_normalized)
-              for (subkey, value) ∈ $$dict_traitsof2_typeparams[key_normalized]
-                if subkey isa Traits.Constrain2
-                  if type <: subkey.type && all(traitsrequire <: traitsof(p)
-                      for (p, traitsrequire) ∈ zip(type_parameters, subkey.parameter_constraints)
-                      if p isa Type)  # also values can be used as typeparameters as in Array{Int, 1}, however we don't have traits for values, but only for types
-                    u = Union{u, value}
-                  end
-                else
-                  if type <: subkey
-                    u = Union{u, value}
-                  end
-                end
-              end
-            end
-          end
-        end
-        :($u)
-      end
-
-      @generated function traitsof(::Type{T1}, ::Type{T2}, ::Type{T3}) where T1 where T2 where T3
-        types = (T1, T2, T3)
-        @assert all(isconcretetype.(types)) "calling traitsof() only supports concrete types"
-        type = Tuple{T1, T2, T3}
-        type_parameters = Base.Iterators.flatten(Traits.parametersof.(types))
-        # include traits from other_traitsof_functions
-        u = Union{$((Expr(:call, fn, :T1, :T2, :T3) for fn ∈ $other_traitsof_functions)...)}
-
-        # union all traits of any parent
-        for STs ∈ Iterators.product(Traits.supertypes.(types)...)
-          # ST1, ST2, ST3 = STs
-          key = Tuple{STs...}
-          if all(Traits.hasnotypeparameters(st) for st ∈ STs)  # this is short cycling
-            u = Union{u, get($$dict_traitsof3, key, Union{})}  # we have the guarantee that this is a supertype
-          else
-            key_normalized = Tuple{Traits.normalize_parametrictype.(STs)...}
-            if haskey(dict_traitsof3_typeparams, key_normalized)
-              for (subkey, value) ∈ $$dict_traitsof3_typeparams[key_normalized]
-                if subkey isa Traits.Constrain3
-                  if type <: subkey.type && all(traitsrequire <: traitsof(p)
-                      for (p, traitsrequire) ∈ zip(type_parameters, subkey.parameter_constraints)
-                      if p isa Type)  # also values can be used as typeparameters as in Array{Int, 1}, however we don't have traits for values, but only for types
-                    u = Union{u, value}
-                  end
-                else
-                  if type <: subkey
-                    u = Union{u, value}
-                  end
-                end
-              end
-            end
-          end
-        end
-        :($u)
-      end
-    end)
+    end
     # execute fixation initially
     # (is only really fixed if a traitsof of a Type is asked for
     #  and then also only for that type)
-    refixate_traitsof()
+    traitsof_refixate()
   end)
 end
 
 # define Basic Traits for Base
-@init_traitsof(BasicTraits.basictraits)
+@traitsof_init(BasicTraits.basictraits)
 
 end # module

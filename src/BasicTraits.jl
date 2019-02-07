@@ -1,10 +1,13 @@
 module BasicTraits
 export basictraits, BitsType, NoBitsType, Immutable, Mutable, Callable
+import ..Traitsof
+
 # mimicking typeclasses from SimpleTraits.BaseTraits
 struct BitsType end
 struct NoBitsType end
 struct Immutable end
 struct Mutable end
+
 
 # no opposite, as you want to check Callable in order to call something
 # and there is no need to check for non-callable as you never want to not call something
@@ -18,7 +21,7 @@ iscallabletype(T) = !isempty(T.name.mt)
 ## we don't need a trait for ConcreteType, as the types which are asked for traits have to be concrete always
 # struct ConcreteType end
 
-function basictraits(value::Type)
+function basictraits(::Traitsof, value::Type)
   newtraits = Union{}
   if isbitstype(value)
     newtraits = Union{newtraits, BitsType}

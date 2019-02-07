@@ -13,11 +13,16 @@ fn(x::X) where X = fn(x, traitsof(X))
 fn(x::AbstractFloat, ::TypeLB(Tr)) = 2
 fn(x::AbstractFloat, _) = 3
 
+traitsof.notypeparams[1][Float32]
+
 traitsof[Float32] = Tr
 traitsof[Int] = Tr
 
 @test fn(5) == 1 # -> 1; dispatch only happens on the type
+
+fn(Float32(5))
 @test fn(Float32(5)) == 2 # -> 2; dispatch through traits
+# TODO  somehow the traitsof call passes a mere Type{DataType} forward instead of a Type{Tuple{DataType}}
 @test fn(Float64(5)) == 3 # -> 3; default dispatch through traits
 
 
@@ -40,3 +45,5 @@ end
 @test evaluate(Levenshtein(), out1, out2) <= 10
 # println(out1)
 # println(out2)
+
+@code_warntype fn(5)
