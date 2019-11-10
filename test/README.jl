@@ -1,34 +1,37 @@
+using Traits
+using Test
+
 using Suppressor
 using StringDistances  # TODO make this a submodule for test only
-
-refixate_traitsof()
 
 # Test README.md example
 # ======================
 
+
+isTr(_) = false
+
 fn(x::Integer) = 1
+@traits fn(x::X) where {X<:AbstractFloat, isTr(X)} = 2
+@traits_show_implementation fn
+@traits fn(x::AbstractFloat) = 3
+@traits_show_implementation fn
 
-struct Tr end
-fn(x::X) where X = fn(x, traitsof(X))
-fn(x::AbstractFloat, ::TypeLB(Tr)) = 2
-fn(x::AbstractFloat, _) = 3
+if !isTr(Float32)  # if the test is reexecuted, the definition already exists
+  @test fn(Float32(5)) == 3 # -> 3; dispatch through traits, but isTr not yet defined, hence using default case
+end
 
-traitsof.notypeparams[1][Float32]
-
-traitsof[Float32] = Tr
-traitsof[Int] = Tr
+isTr(::Type{Float32}) = true
+isTr(::Type{Int}) = true
 
 @test fn(5) == 1 # -> 1; dispatch only happens on the type
-
-fn(Float32(5))
 @test fn(Float32(5)) == 2 # -> 2; dispatch through traits
-# TODO  somehow the traitsof call passes a mere Type{DataType} forward instead of a Type{Tuple{DataType}}
 @test fn(Float64(5)) == 3 # -> 3; default dispatch through traits
 
 
-struct Tr2 end
-traitsof[Float16] = Tr2
-fn(x::AbstractFloat, ::TypeLB(Tr2)) = 4
+isTr2(_) = false
+isTr2(::Type{Float16}) = true
+@traits fn(x::X) where {X <: AbstractFloat, isTr2(X)} = 4
+@traits_show_implementation fn
 
 @test fn(Float16(5)) == 4 # -> 4; dispatch through traits
 @test fn(Float32(5)) == 2 # -> 2; NO MethodError; nothing is overwritten, everything works like you would hope for
@@ -41,8 +44,13 @@ out2 = @capture_out begin
   @code_llvm fn(Float16(5))
 end
 
+function find_definition(out)
+  s = findfirst("Function", out)
+  out[s.start: end]
+end
+
 # string distance should be small
-@test evaluate(Levenshtein(), out1, out2) <= 10
+@test evaluate(Levenshtein(), find_definition(out1), find_definition(out2)) <= 10
 # println(out1)
 # println(out2)
 
