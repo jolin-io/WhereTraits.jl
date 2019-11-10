@@ -1,16 +1,20 @@
 module BasicTraits
-export ismutabletype, isiteratetype, iscallabletype, isbitstype, isconcretetype
+export ismutable, isimmutable, isiterable, iscallable,
+  isbitstype, isconcretetype
+
 # mimicking typeclasses from SimpleTraits.BaseTraits
 
-ismutabletype(T::DataType) = T.mutable
-ismutabletype(::Type) = false
+ismutable(T::DataType) = T.mutable
+ismutable(::Type) = false
+ismutable(value) = !Base.isimmutable(value)
+Base.isimmutable(T::Type) = !ismutable(T)
 
-isiteratetype(T) = hasmethod(iterate, Tuple{T})
+const isiterable = Base.isiterable
 
 # if we would like to test whether the type itself is callable, we would use ``iscallable(f) = !isempty(methods(f))``
 # https://stackoverflow.com/questions/41658692/how-to-determine-if-julia-object-is-callable
 # but Types are always callable, so this makes no sense here
-function iscallabletype(T)
+function iscallable(T)
   if isdefined(T, :name) && isdefined(T.name, :mt)
     !isempty(T.name.mt)
   else

@@ -9,3 +9,8 @@ end
 @testset "README" begin
   include("README.jl")
 end
+
+
+@testset "BasicTraits" begin
+  include("BasicTraits.jl")
+end
