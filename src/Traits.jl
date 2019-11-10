@@ -1,387 +1,436 @@
 module Traits
-export @traitsof_init, TypeLowerBound, TypeLB, Constrain, Constrain1, Constrain2, Constrain3, Traitsof, @traitsof_link
+export @traits
 
-# TODO think about supporting traits for Union types, like Union{Int, Nothing} or Union{Double, Missing}
-
-# Traits.functions needs to be accessed qualified, i.e. Traits.functions
 include("Utils.jl")
-include("BasicTraits.jl")
 using .Utils
-using Base.Iterators
-
-"""
-all subtypes should implement the following fields:
-```julia
-type::Type{Tuple{T1, T2, T3, ..., TN}}
-parameter_constraints::Tuple
-```
-where `length(parameter_constraints) == length(type.parameters)`, i.e. one constraint per Type T
-
-Each constraint, is just a Union of traits which you the parameter to fulfil.
-If there is no constraint required use `Union{}`
-"""
-abstract type Constrain{N} end
-"""
-support complex dependencies on typeparameters for a single type
-"""
-struct Constrain1{T} <: Constrain{1}
-  type::Type{Tuple{T}}
-  # we would need typeof() instead of Type{} because tuple(Dict) isa Tuple{typeof(Dict)} but not a Tuple{Type{Dict}}
-  # however typeof(T) gives TypeVar as this apparently is evaluated at an earlier stage
-  # hence no types support
-  # types::Tuple{typeof(T)}
-  parameter_constraints::Tuple
-
-  function Constrain1{T}(parameter_constraints...) where T
-    if length(parametersof(T)) != length(parameter_constraints)
-      error("need exactly as many parameter trait specifications as type ``$T`` has parameters")
-    end
-    new{T}(Tuple{T}, parameter_constraints)
-  end
-end
-
-"""
-support complex dependencies on typeparameters for two types
-"""
-struct Constrain2{T1, T2} <: Constrain{2}
-  type::Type{Tuple{T1, T2}}
-  parameter_constraints::Tuple
-
-  function Constrain2{T1, T2}(parameter_constraints...) where T1 where T2
-    if sum(length(parametersof(t)) for t in (T1, T2)) != length(parameter_constraints)
-      error("need exactly as many parameter trait specifications as types ``$T1, $T2`` have parameters in total")
-    end
-    new{T1, T2}(Tuple{T1, T2}, parameter_constraints)
-  end
-end
-
-"""
-support complex dependencies on typeparameters for three types
-"""
-struct Constrain3{T1, T2, T3} <: Constrain{3}
-  type::Type{Tuple{T1, T2, T3}}
-  parameter_constraints::Tuple
-
-  function Constrain3{T1, T2, T3}(parameter_constraints...) where T1 where T2 where T3
-    if sum(length(parametersof(t)) for t in (T1, T2, T3)) != length(parameter_constraints)
-      error("need exactly as many parameter trait specifications as types ``$T1, $T2, $T3`` have parameters in total")
-    end
-    new{T1, T2, T3}(Tuple{T1, T2, T3}, parameter_constraints)
-  end
-end
-
-"""
-    functions(trait_type)
-
-Returns all functions which are associated with the given ``trait_type`` Type.
-
-This is just for convention, i.e. overload it for your custom Trait
-so that your Users know which functions they are supposed to implement.
-
-For Traits which are defined as Unions of Function types, the functions are extracted automatically.
-
-# Examples
-```jldoctest
-julia> functions(Union{typeof(+), typeof(identity)})
-2-element Array{Function,1}:
- +
- identity
-```
-"""
-function functions end
-functions(::Type{T}) where T = []
-functions(u::Union) = [functions(u.a); functions(u.b)]
-functions(f::Type{T} where T <: Function) = _functions_isfunction(f)
-# if a Union contains only functions, it is also a subtype of Function
-_functions_isfunction(u::Union) = [functions(u.a); functions(u.b)]
-_functions_isfunction(f) = [f.instance]  # ``fieldnames`` don't work here, but ``propertynames`` do to see the fields of typeof(+) e.g.
+using DataTypesBasic
+using ASTParser
+using SimpleMatch
+using DataStructures
 
 
-"""
-    TypeLowerBound(type_lower_bound) = Type{T} where type_lower_bound <: T <: Any
-
-short ``TypeLB``.
-
-# Examples
-```jldoctest
-julia> TypeLB(Union{Integer, String})
-Type{T} where T>:Union{Integer, String}
-```
-for convenience also the following works
-```jldoctest
-julia> TypeLB(Integer, String)
-Type{T} where T>:Union{Integer, String}
-```
-"""
-TypeLowerBound(::Type{LB}) where LB = Type{>:LB}
-TypeLowerBound(::Type{A}, ::Type{B}) where A where B = Type{>:Union{A, B}}
-TypeLowerBound(::Type{A}, ::Type{B}, ::Type{C}) where A where B where C = Type{>:Union{A, B, C}}
-TypeLowerBound(::Type{A}, ::Type{B}, ::Type{C}, ::Type{D}) where A where B where C where D = Type{>:Union{A, B, C, D}}
-TypeLowerBound(::Type{A}, ::Type{B}, ::Type{C}, ::Type{D}, ::Type{E}) where A where B where C where D where E = Type{>:Union{A, B, C, D, E}}
-TypeLB = TypeLowerBound
-
-
-
-"""
-abstract super type for traitsof functions to enable easier dispatching
-
-Think Traitsof as a struct type with the following properties:
-  ...TODO copy struct type signature
-
-It is not a struct itself, because we want to be able to overwrite the function call
-  syntax of each single traitsof instance, which requires subtyping.
-"""
-abstract type Traitsof end
-
-Base.iterate(x::Traitsof) = (x, nothing)
-Base.iterate(x::Traitsof, ::Any) = nothing
-
-Base.getindex(traitsof::Traitsof, args...) = traitsof(args...)
-
-function Base.setindex!(traitsof::Traitsof, ::Type{Value}, types::Vararg{Type, N}) where Value where N
-  if all(Traits.hasnotypeparameters.(types))
-    traitsof.notypeparams[N][types] = Union{Value, traitsof.notypeparams[N][types]}
+# Parsers.toAST(x::Union{DataType, UnionAll}) = Base.Meta.parse(repr(x))
+function Parsers.toAST(tv::TypeVar)
+  if tv.lb === Union{} && tv.ub === Any
+    tv.name
+  elseif tv.lb === Union{}
+    :($(tv.name) <: $(tv.ub))
+  elseif tv.ub === Any
+    :($(tv.name) >: $(tv.lb))
   else
-    types_normalized = Traits.normalize_parametrictype.(types)
-    # create empty subdict if not existing
-    subdict = get!(traitsof.typeparams[N], types_normalized)
-    v = subdict[types]
-    Base.setindex!(subdict, Union{Value, v}, types)
-    subdict[types] = Union{Value, subdict[types]}
+    :($(tv.lb) <: $(tv.name) <: $(tv.ub))
   end
 end
 
-function Base.setindex!(traitsof::Traitsof, ::Type{Value}, c::Constrain{N}) where Value where N
-  types_normalized = Traits.normalize_parametrictype.(tuple(c.type.parameters...))
-  # create empty subdict if not existing
-  subdict = get!(traitsof.typeparams[N], types_normalized)
-  subdict[c] = Union{Value, subdict[c]}
+_split_typevar(base) = base, []
+function _split_typevar(t::UnionAll)
+  base, typevars = _split_typevar(t.body)
+  base, [t.var; typevars...]
+end
+
+next(iter::Base.Iterators.Stateful) = iterate(iter)[1]
+
+normalized_typevar_by_position(position::Int) = TypeVar(Symbol("T", position))
+normalized_typevar_by_position(position::Int, ub) = TypeVar(Symbol("T", position), ub)
+normalized_typevar_by_position(position::Int, lb, ub) = TypeVar(Symbol("T", position), lb, ub)
+normalized_arg_by_position(position::Int) = Symbol("a", position)
+
+function normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
+  typeexprs = []
+  typevars = TypeVar[]
+  for p in type.parameters
+    _typeexpr, _typevars = _normalize_typevars1(p, typevars_old, typevar_new_to_old, countfrom)
+    push!(typeexprs, _typeexpr)
+    append!(typevars, _typevars)
+  end
+  typeexprs, typevars
+end
+# the very first level treats UnionAlls differently in that they will become function where typevariables
+function _normalize_typevars1(type::UnionAll, typevars_old, typevar_new_to_old, countfrom)
+  typebase, extra_typevars = _split_typevar(type)
+  _normalize_typevars(typebase, [typevars_old; extra_typevars], typevar_new_to_old, countfrom)
+end
+function _normalize_typevars1(type, typevars_old, typevar_new_to_old, countfrom)
+  _normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
 end
 
 
-"""
-generic function to call traitsof
-
-this is used internally to construct the generated functions for traitsof
-"""
-function call_traitsof(traitsof::Traitsof, types::NTuple{N, Type}) where N
-  @assert all(isconcretetype.(types)) "calling traitsof() only supports concrete types"
-
-  type = Tuple{types...}
-  types_parameters = Base.Iterators.flatten(Traits.parametersof.(types))
-
-  # include traits from parent_functions
-  u::Type = Union{(fn(types...) for fn ∈ traitsof.parent_functions)...}
-
-  # we go through all possible combinations of supertypes
-  for supertypes ∈ Iterators.product(Traits.supertypes.(types)...)  # Traits.supertypes includes the type itself
-    if all(Traits.hasnotypeparameters(st) for st ∈ supertypes) # this is short-cycling
-      u = Union{u, traitsof.notypeparams[N][supertypes]} # we have the guarantee that this is a supertype
+function _normalize_typevars(type::DataType, typevars_old, typevar_new_to_old, countfrom::Base.Iterators.Stateful)
+  if isabstracttype(type)
+    i = next(countfrom)
+    new = normalized_typevar_by_position(i, type)
+    new.name, [new]
+  else
+    if isempty(type.parameters)
+      type, TypeVar[]
     else
-      supertypes_normalized = Traits.normalize_parametrictype.(supertypes)
-      # for traitsof(type with typeparams) also include all ancestors_traitsof and their parents_traitsof and so on
-      all_typeparams = flatten(trof.typeparams[N][supertypes_normalized] for trof in chain(traitsof, traitsof.ancestors_traitsof))
-      for (key, value) ∈ all_typeparams
-        if key isa Traits.Constrain{N}
-          if type <: key.type && all(traitsrequire <: traitsof(param)
-              for (param, traitsrequire) ∈ zip(types_parameters, key.parameter_constraints)
-              if param isa Type)  # also values can be used as typeparameters as in Array{Int, 1}, however we don't have traits for values, but only for types
-            u = Union{u, value}
-          end
+      # recurse
+      typeexprs = []
+      typevars = TypeVar[]
+      for p in type.parameters
+        _typeexpr, _typevars = _normalize_typevars(p, typevars_old, typevar_new_to_old, countfrom)
+        push!(typeexprs, _typeexpr)
+        append!(typevars, _typevars)
+      end
+      Expr(:curly, Base.unwrap_unionall(type).name.name, typeexprs...), typevars
+    end
+  end
+end
+
+function _normalize_typevars(tv::TypeVar, typevars_old, typevar_new_to_old, countfrom::Base.Iterators.Stateful)
+  if tv in typevars_old
+    i = next(countfrom)
+    new = normalized_typevar_by_position(i, tv.lb, tv.ub)
+    typevar_new_to_old[new.name] = tv.name
+    new.name, [new]
+  else  # this might be a nested UnionAll somewhere
+    tv.name, TypeVar[]
+  end
+end
+function _normalize_typevars(type::UnionAll, typevars_old, typevar_new_to_old, countfrom)
+  typebase, typevars_unionall = _split_typevar(type)
+  typebase_expr_new, typevars_new = _normalize_typevars(typebase, typevars_old, typevar_new_to_old, countfrom)
+  _expr_rewrap_typevars(typebase_expr_new, typevars_unionall), typevars_new
+end
+_normalize_typevars(any, typevars_old, typevar_new_to_old, countfrom) = any, TypeVar[]
+
+function _expr_rewrap_typevars(typeexpr::Expr, typevars)
+  Expr(:where, typeexpr, toAST.(typevars)...)
+end
+
+struct _BetweenCurliesAndArgs end
+
+normalize_func(mod, func_expr::Expr) = normalize_func(mod, Parsers.Function()(func_expr))
+function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
+  args_parsed = map(Parsers.Arg(), func_parsed.args)
+  typevar_new_to_old = Dict{Symbol, Symbol}()
+  arg_new_to_old = Dict{Symbol, Symbol}()
+
+  countfrom_typevars = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
+  countfrom_args = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
+
+  # enumerate types
+  # ---------------
+  # TODO rename this to signature?
+  # we add _BetweenCurliesAndArgs to reuse ``type`` as identifying signature without mixing curly types and arg types
+  typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
+    _BetweenCurliesAndArgs, (toAST(a.type) for a in args_parsed)...)
+  typeexpr_full = :($typeexpr where {$(toAST(func_parsed.wheres)...)})
+  type = Base.eval(mod, typeexpr_full)
+  typebase, typevars = _split_typevar(type)
+  typeexprs_new, typevars_new = normalize_typevars(typebase, typevars, typevar_new_to_old, countfrom_typevars)
+
+  curlies_typeexprs_new = typeexprs_new[1:length(func_parsed.curlies)]
+  args_typeexprs_new = typeexprs_new[length(func_parsed.curlies)+2:end]  # + 2 because of _BetweenCurliesAndArgs
+
+  for (a, type) in zip(args_parsed, args_typeexprs_new)
+    a.type = type
+
+    # enumerate args
+    # --------------
+    arg_position = next(countfrom_args)
+    new = normalized_arg_by_position(arg_position)
+    arg_new_to_old[new] = a.name
+    a.name = new
+  end
+
+  # we return the whole signature to easily decide whether the function overwrites another
+  outerfunc = (
+    signature = type,
+    name = func_parsed.name,
+    curlies = curlies_typeexprs_new,
+    args = toAST(args_parsed),
+    wheres = toAST(typevars_new),
+    # body information
+    innerargs_args = sort([a.name for a in args_parsed]),
+    innerargs_typevars = sort([tv.name for tv in typevars_new]),
+  )
+  innerfunc = (
+    args_mapping = arg_new_to_old,
+    typevars_mapping = typevar_new_to_old,
+  )
+  outerfunc, innerfunc
+end
+
+
+_change_symbols(vec::Vector, symbol_mapping) = [_change_symbols(x, symbol_mapping) for x in vec]
+_change_symbols(sym::Symbol, symbol_mapping) = get(symbol_mapping, sym, sym)
+_change_symbols(qn::QuoteNode, symbol_mapping) = QuoteNode(_change_symbols(qn.value, symbol_mapping))
+_change_symbols(expr::Expr, symbol_mapping) = Expr(expr.head, _change_symbols(expr.args, symbol_mapping)...)
+
+filtersplit(f, a) = filter(f, a), filter(!f, a)
+
+TraitsFunctionParsed(mod, expr::Expr) = TraitsFunctionParsed(mod, Parsers.Function()(expr))
+function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed)
+  # Parse main syntax
+  # =================
+  args_names = [Parsers.Arg()(arg).name for arg in func_parsed.args]
+  args_names_matcher = Matchers.AnyOf(args_names...)
+  whereexpr_parser = Matchers.AnyOf(
+    # we allow dispatch on arguments
+    Named{:arg}(args_names_matcher), # interpreted as bool
+    Named{:arg}(Parsers.TypeAnnotation(name=args_names_matcher)),
+    Named{:arg}(Parsers.TypeRange(name=args_names_matcher)),
+    # all other symbols refer to standard TypeVariables
+    Named{:normal}(Parsers.Symbol()),
+    Named{:normal}(Parsers.TypeRange(name=Parsers.Symbol())),
+    # we further allow to dispatch on functions from either args or standard typevars
+    # which should be all the rest
+    Named{:func}(Parsers.Call()),  # interpreted as bool
+    Named{:func}(Parsers.TypeAnnotation()),
+    Named{:func}(Parsers.TypeRange()),
+  )
+  parsed_wheres = map(whereexpr_parser, func_parsed.wheres)
+  normal_wheres, extra_wheres = filtersplit(parsed_wheres) do x
+    x isa Parsers.Named_Parsed{:normal}
+  end
+
+
+  # prepare extra wheres
+  # ====================
+
+  traits = map(extra_wheres) do expr
+    @match(expr) do f
+      f(x::Named_Parsed{:arg, <:Matchers.AnyOf}) = :(Val{$(toAST(x.expr))}())  # plain arguments are interpreted as bool
+      # plain calls are assumed to refer to boolean expressions
+      function f(x::Named_Parsed{:func, Parsers.Call})
+        if x.expr.name == :!
+          # if the last call is negation "!" we take the thing which is negated
+          # as a trait function and dispatch on False
+          :(Val{$(toAST(x.expr.args[1]))}())
         else
-          # if key is not a Constrain, then key can still be a Tuple of specific UnionAll types which may match or not
-          # we first need to construct a TupleType from the Tuple key to easily check the inheritage
-          if type <: Tuple{key...}
-            u = Union{u, value}
-          end
+          :(Val{$(toAST(x.expr))}())
+        end
+      end
+      f(x::Named_Parsed{<:Any, Parsers.TypeAnnotation}) = toAST(x.expr.name)
+      f(x::Named_Parsed{<:Any, Parsers.TypeRange}) = toAST(x.expr.name)
+    end
+  end
+
+  traits_matches = map(enumerate(extra_wheres)) do (i, expr)
+    @match(expr) do f
+      f(x::Named_Parsed{:arg, <:Matchers.AnyOf}) = :(::Val{true})  # plain arguments are interpreted as bool
+      f(x::Named_Parsed{:func, Parsers.Call}) = x.expr.name == :! ? :(::Val{false}) : :(::Val{true}) # plain calls are assumed to refer to boolean expressions
+      f(x::Named_Parsed{<:Any, Parsers.TypeAnnotation}) = Expr(:(::), toAST(x.expr.type))
+      function f(x::Named_Parsed{<:Any, Parsers.TypeRange})
+        tr = x.expr
+        @assert !(tr.lb === Union{} && tr.ub == Any) "should have at least an upperbound or a lowerbound"
+        if tr.lb === Union{}  # only upperbound
+          :(::Type{<:$(toAST(tr.ub))})
+        elseif tr.ub === Any  # only LowerBound
+          :(::Type{>:$(toAST(tr.lb))})
+        else  # both
+          :(::Type{T} where {$(toAST(tr.lb)) <: T <: $(toAST(tr.up))})
         end
       end
     end
   end
-  u
+
+  # normalize first function dispatch level
+  # =======================================
+
+  outerfunc_parsed = Parsers.Function_Parsed(
+    name = func_parsed.name,
+    curlies = func_parsed.curlies,
+    args = func_parsed.args,
+    kwargs = [],
+    wheres = toAST(normal_wheres),
+    body = :nothing
+  )
+
+  outerfunc_fixed, innerfunc = normalize_func(mod, outerfunc_parsed)
+
+  @assert(
+    isempty(intersect(keys(innerfunc.args_mapping), keys(innerfunc.typevars_mapping))),
+    "args and typevariables must not overlap!
+    Found $(intersect(keys(innerfunc.args_mapping), keys(innerfunc.typevars_mapping))) in both.")
+  old_to_new = Dict(v => k for (k, v) in merge(innerfunc.args_mapping, innerfunc.typevars_mapping))
+  traits_normalized = _change_symbols(traits, old_to_new)
+  traits_mapping = Dict(zip(traits_normalized, traits_matches))
+
+  outerfunc = (
+    fixed = outerfunc_fixed,
+    innerargs_traits = sortexpr(unique(traits_normalized)),
+  )
+  innerfunc′ = (
+    body = func_parsed.body,
+    kwargs = func_parsed.kwargs,
+    args_mapping = innerfunc.args_mapping,
+    typevars_mapping = innerfunc.typevars_mapping,
+    traits_mapping = traits_mapping,
+  )
+  outerfunc, innerfunc′
 end
 
 
-"""
-binds a functions that expects Traitsof as first argument to the current traitsof
 
-general recommendation how to link specific functions to the module's own traitsof function:
 
-use as:
-```
-@traitsof_link OtherModule.function_expecting_traitsof_as_first_argument
-
-@traitsof_link begin
-  OtherModule.funcA
-  OtherModule.funcB
+function merge!(mod::Module, store, function_parsed::Parsers.Function_Parsed)
+  outerfunc, innerfunc = TraitsFunctionParsed(mod, function_parsed)
+  merge!(store, outerfunc, innerfunc)
 end
 
-@traitsof_link OtherModule begin
-  funcA
-  funcB
-end
-```
-"""
-macro traitsof_link(func)
-  if func.head == :block
-    funcs = filter(func.args) do expr
-      expr isa Union{Expr, Symbol, QuoteNode}
+function merge!(store, outerfunc, innerfunc)
+  signature = outerfunc.fixed.signature
+  if haskey(store, signature)
+    outerfunc′, innerfuncs = store[signature]
+    push!(innerfuncs, innerfunc)
+
+    old_innerargs_traits = outerfunc′.innerargs_traits
+    new_innerargs_traits = sortexpr(unique([old_innerargs_traits; outerfunc.innerargs_traits]))
+
+    if  old_innerargs_traits == new_innerargs_traits
+      # nothing extra to be done
+      # still we need outerfunc' for the information which traits are currently used in total
+      outerfunc′, innerfunc
+    else
+      outerfunc′′ = (
+        # outerfunc.fixed == outerfunc′.fixed
+        fixed = outerfunc′.fixed,
+        innerargs_traits = new_innerargs_traits,
+      )
+      update = (outerfunc′′, innerfuncs)
+      store[signature] = update
+      update
     end
-    Expr(:block, single_traitsof_link.(funcs)...)
   else
-    single_traitsof_link(func)
+    # TODO define Type for Set
+    innerfuncs = Set([innerfunc])
+    initial = (outerfunc, innerfuncs)
+    store[signature] = initial
+    initial
   end
 end
-macro traitsof_link(mod, funcs)
-  @assert funcs.head == :block
-  funcs = filter(funcs.args) do expr
-    expr isa Union{Expr, Symbol, QuoteNode}
+
+const TraitsStore = TypeDict{Tuple{Any, Set}}
+# here all the states are stored which are needed to realize @traits macro
+const traits_store = Dict{Tuple{Symbol, Symbol}, TraitsStore}()
+
+function getorcreatestore!(mod, funcname)
+  storename = Symbol(funcname, "_traitsstore")
+  key = (Symbol(string(mod)), funcname)
+  store = if haskey(traits_store, key)
+    traits_store[key]
+  else
+    newstore = TraitsStore()
+    traits_store[key] = newstore
+    newstore
   end
-  funcs = [merge_module_attr(mod, f) for f in funcs]
-  Expr(:block, single_traitsof_link.(funcs)...)
 end
 
 
-function single_traitsof_link(func)
-  funcname = extract_name(func)
-  esc(quote
-    $funcname(args...; kwargs...) = $func(traitsof, args...; kwargs...)
-  end)
-end
+struct _BetweenTypeVarsAndTraits end
+struct _BetweenArgsAndTypeVars end
+_innerfunctionname(funcname) = Symbol(funcname, "_traits")
 
-
-
-
-"""
-eval the definition of traitsof in the current module
-
-This is mainly used to easily precompile traitsof.
-Preventing type piracy is also targeted, but not so much, as traits can only be added to.
-Still, by adding certain traits you can break others code.
-
-With your own traitsof definition, such problems are all fixed.
-"""
-macro traitsof_init(parent_functions...)
-
-  # we use a hidden symbol for the ConcreteType, as this should be a singleton type
-  # and is only constructed to easily recompile generated functions per package
-  ConcreteTraitsof = :ConcreteTraitsof
-
-  esc(quote
-    # escape this, as we want to define
-    # the traitsof function in the calling environment
-
-    # TODO adapt string representation to present module which it is defined in
-    # TODO adapt doc
-    """
-        traitsof(type)  # query current generated traits for ``type``
-        traitsof[type]  # == traitsof(type)
-        traitsof[type] = TraitType  # add new ``TraitType`` as a trait to ``type``
-
-        traitsof()  # regenerate Traits from internal dictionari_refixatees
-
-    Return the trait types of a given Type ``type``. If the type has multiple traits, a Union Type is returned.
-
-    # Examples
-    ```jldoctest
-    julia> traitsof(Integer)  # default value
-    Union{}
-    julia> traitsof[Integer] = Union{Integer, String}
-    julia> traitsof[Integer]
-    julia> Union{}  # traitsof is generated function and hence need to be recompiled to change values
-    julia> traitsof()  # with th_refixateis
-    julia> traitsof[Integer]
-    Union{Integer, String}
-    julia> traitsof(Integer)  # [] or () - both do the same
-    Union{Integer, String}
-    julia> struct MyType end
-    julia> traitsof(MyType)  # everything has Union{} as default value
-    Union{}
-    ```
-    """
-    struct $ConcreteTraitsof <: Traits.Traitsof
-      parent_functions::Vector{Any}
-      ancestors_traitsof::Vector{Traits.Traitsof}  # recursive
-
-
-      # we partition the lookup for traits by 1) arity, and 2) typeparameters
-      # where we create lookup tables for all respective types and unionall types
-
-      # for types without typeparameters we can directly map the type to a respective collection of Traits
-      notypeparams::Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Type} where N}
-      # types with typeparameters are looked up in two stages
-      # first as the generalized UnionAll to summarize all different types around that parametric type
-      # second as a concrete mapping of types to traits
-      typeparams::Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}} where N}
-
-      function $ConcreteTraitsof(parent_functions)  # TODO create global parameter for default N?
-        parent_traitsof = [traitsof for traitsof ∈ parent_functions if traitsof isa Traitsof]
-        ancestors_traitsof = [parent_traitsof; (p.ancestors_traitsof for p ∈ parent_traitsof)...]
-
-        # initialize DefaultDicts
-        # always store top dict (there shouldn't be much requests/memory overhead and it simplifies the AP)
-        notypeparams = Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Type} where N}(true) do N
-          # don't store final default type automatically
-          Traits.DefaultDict{NTuple{N, Type}, Type}(false) do _
-            Union{}
-          end
-        end
-        # always store top dict
-        typeparams = Traits.DefaultDict{Int, Traits.DefaultDict{NTuple{N, Type}, Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}} where N}(true) do N
-          # don't always store subdicts, as this will be asked
-          Traits.DefaultDict{NTuple{N, Type}, Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}}(false) do _
-            # don't store final default type automatically
-            Traits.DefaultDict{Union{NTuple{N, Type}, Traits.Constrain{N}}, Type}(false) do _
-              Union{}
-            end
-          end
-        end
-        new(collect(parent_functions), ancestors_traitsof, notypeparams, typeparams)
-      end
+# TODO Deprecate? it might be better to just use one syntax
+function _render(store::TraitsStore)
+  exprs = []
+  for (outerfunc, innerfuncs) in store
+    push!(exprs, _render(outerfunc))
+    for innerfunc in innerfuncs
+      push!(exprs, _render(outerfunc, innerfunc))
     end
-
-    # this should be the only instance of $ConcreteTraitsof
-    # all dispatching is done via the abstract type Traits.Traitsof
-    const traitsof = $ConcreteTraitsof(tuple($(parent_functions...)))
-
-
-    # This is not a macro because it has to change always the same traitsof definition
-    # which was defined by the same ``@init_traitsof`` macro call
-    """
-        traitsof_refixate()
-
-    reset the generated code of traitsof
-    hence subsequent calls of ``traitsof(...)``  will include all recent
-    additions to ``traitsof`` (like ``traitsof[type] = MyNewTraitType``)
-    """
-    function traitsof_refixate()
-      maxN = 3  # TODO change to global config parameter
-      # we need to go through different arities manually to be able to use generated functions while extracting type information
-      for N in 1:maxN
-        typenames = Symbol.(:T, 1:N)
-        args = [:(_::Type{$tn}) for tn in typenames]
-        # we have to ignore the given traitsof object in the functionhead because this is a generated function,
-        # i.e. we only get the Type and not the object itself
-        # luckily this traitsof is uniquely defined and already directly referencable
-        functionhead = Traits.where(:((::typeof(traitsof))($(args...))), typenames...)  # $$ConcreteTraitsof
-        eval(quote
-          # got parse error when using function $functionhead instead
-          # luckily the second function syntax works
-          @generated $functionhead = begin
-            traits = Traits.call_traitsof($traitsof, tuple($(typenames...)))
-            :($traits)
-          end
-        end)
-      end
-    end
-    # execute fixation initially
-    # (is only really fixed if a traitsof of a Type is asked for
-    #  and then also only for that type)
-    traitsof_refixate()
-  end)
+  end
+  Expr(:block, exprs...)
 end
 
-# define Basic Traits for Base
-@traitsof_init(BasicTraits.basictraits)
+function _render(outerfunc_innerfuncs::Tuple{Any, Set})
+  outerfunc, innerfuncs = outerfunc_innerfuncs
+  exprs = []
+  push!(exprs, _render(outerfunc))
+  for innerfunc in innerfuncs
+    push!(exprs, _render(outerfunc, innerfunc))
+  end
+  Expr(:block, exprs...)
+end
+
+function _render(outerfunc_innerfunc::Tuple{Any, Any})
+  outerfunc, innerfunc = outerfunc_innerfunc
+  _render(outerfunc, innerfunc)
+end
+
+function _map_args(new_to_old, innerargs)
+  map(innerargs) do a
+    get(new_to_old, a, :(_))
+  end
+end
+
+function _render(outerfunc, innerfunc)
+  args = [
+    # we need to dispatch on the signature so that different outerfuncs don't
+    # overwrite each other's innerfunc
+    :(::$(Type{outerfunc.fixed.signature}));
+    _map_args(innerfunc.args_mapping, outerfunc.fixed.innerargs_args);
+    :(::$_BetweenArgsAndTypeVars);
+    _map_args(innerfunc.typevars_mapping, outerfunc.fixed.innerargs_typevars);
+    :(::$_BetweenTypeVarsAndTraits);
+    _map_args(innerfunc.traits_mapping, outerfunc.innerargs_traits);
+  ]
+  innerfunc_parsed = Parsers.Function_Parsed(
+    name = _innerfunctionname(outerfunc.fixed.name),
+    curlies = [],
+    args = args,
+    kwargs = innerfunc.kwargs,
+    wheres = [],
+    body = innerfunc.body
+  )
+  toAST(innerfunc_parsed)
+end
+
+function _render(outerfunc)
+  innerargs = [
+    # we need to dispatch on the signature so that different outerfuncs don't
+    # overwrite each other's innerfunc
+    outerfunc.fixed.signature;
+    outerfunc.fixed.innerargs_args;
+    _BetweenArgsAndTypeVars();
+    outerfunc.fixed.innerargs_typevars;
+    _BetweenTypeVarsAndTraits();
+    outerfunc.innerargs_traits;
+  ]
+  innerfunc_call = Parsers.Call_Parsed(
+    name = _innerfunctionname(outerfunc.fixed.name),
+    curlies = [],
+    args = innerargs,
+    kwargs = [:(kwargs...)],
+  )
+  outerfunc_parsed = Parsers.Function_Parsed(
+    name = outerfunc.fixed.name,
+    curlies = outerfunc.fixed.curlies,
+    args = outerfunc.fixed.args,
+    kwargs = [:(kwargs...)],
+    wheres = outerfunc.fixed.wheres,
+    body = innerfunc_call
+  )
+  toAST(outerfunc_parsed)
+end
+
+
+macro traits(expr)
+  _traits(__module__, expr)
+end
+
+function _traits(mod, expr::Expr)
+  parser = Matchers.AnyOf(Parsers.Function(), Parsers.Block())
+  _traits(mod, parser(expr))
+end
+
+function _traits(mod, func::Parsers.Function_Parsed)
+  store = getorcreatestore!(mod, func.name)
+  newfunc = merge!(mod, store, func)
+  _render(newfunc)
+end
+
+function _traits(mod, block::Parsers.Block_Parsed)
+  # traits on block doesn't use any global state
+  store = TraitsStore()
+  parser = Matchers.AnyOf(Parsers.Function(), anything)
+  funcs = [p for p in [parser(a) for a in block.args] if p isa Parsers.Function]
+  for f in funcs
+    merge!(mod, store, f)
+  end
+  _render(store)
+end
 
 end # module

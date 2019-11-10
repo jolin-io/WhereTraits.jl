@@ -1,71 +1,28 @@
-[[Base64]]
-uuid = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+# This file is machine-generated - editing it directly is not advised
 
-[[Distances]]
-deps = ["LinearAlgebra", "Printf", "Random", "Statistics", "Test"]
-git-tree-sha1 = "2f38605722542f1c0a32dd2856fb529d8c226c69"
-uuid = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
-version = "0.7.3"
+[[ASTParser]]
+deps = ["ProxyInterface", "SimpleMatch", "StructEquality"]
+path = "D:\\ProjectsJulia\\\\ASTParser\\\\"
+uuid = "3311a090-b55d-11e9-176d-dbdfc6a88253"
+version = "0.1.0"
 
-[[Distributed]]
-deps = ["LinearAlgebra", "Random", "Serialization", "Sockets"]
-uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+[[DataTypesBasic]]
+path = "D:\\ProjectsJulia\\\\DataTypesBasic\\\\"
+uuid = "83eed652-29e8-11e9-12da-a7c29d64ffc9"
+version = "0.1.0"
 
-[[InteractiveUtils]]
-deps = ["LinearAlgebra", "Markdown"]
-uuid = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+[[ProxyInterface]]
+path = "D:\\ProjectsJulia\\\\ProxyInterface\\\\"
+uuid = "90c4b210-f34a-11e9-1a87-5d0d3aaf0cab"
+version = "0.1.0"
 
-[[IterTools]]
-deps = ["SparseArrays", "Test"]
-git-tree-sha1 = "79246285c43602384e6f1943b3554042a3712056"
-uuid = "c8e1da08-722c-5040-9ed9-7db0dc04731e"
-version = "1.1.1"
+[[SimpleMatch]]
+path = "D:\\ProjectsJulia\\\\SimpleMatch\\\\"
+uuid = "a3ae8450-d22f-11e9-3fe0-77240e25996f"
+version = "0.1.0"
 
-[[Libdl]]
-uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
-
-[[LinearAlgebra]]
-deps = ["Libdl"]
-uuid = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-
-[[Logging]]
-uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"
-
-[[Markdown]]
-deps = ["Base64"]
-uuid = "d6f4376e-aef5-505a-96c1-9c027394607a"
-
-[[Printf]]
-deps = ["Unicode"]
-uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
-
-[[Random]]
-deps = ["Serialization"]
-uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
-
-[[Serialization]]
-uuid = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
-
-[[Sockets]]
-uuid = "6462fe0b-24de-5631-8697-dd941f90decc"
-
-[[SparseArrays]]
-deps = ["LinearAlgebra", "Random"]
-uuid = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
-
-[[Statistics]]
-deps = ["LinearAlgebra", "SparseArrays"]
-uuid = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
-
-[[StringDistances]]
-deps = ["Distances", "IterTools", "Test"]
-git-tree-sha1 = "41fddd579b75e0cd0d1bbdb2d68a2a9cc588c164"
-uuid = "88034a9c-02f8-509d-84a9-84ec65e18404"
-version = "0.3.0"
-
-[[Test]]
-deps = ["Distributed", "InteractiveUtils", "Logging", "Random"]
-uuid = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[[Unicode]]
-uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
+[[StructEquality]]
+deps = ["SimpleMatch"]
+path = "D:\\ProjectsJulia\\\\StructEquality\\\\"
+uuid = "6ec83bb0-ed9f-11e9-3b4c-2b04cb4e219c"
+version = "0.1.0"

@@ -1,14 +1,19 @@
 name = "Traits"
 uuid = "5060dc80-e054-11e8-0acc-1dc6592f659e"
 authors = ["Sahm Stephan <s.sahm@reply.de>"]
-version = "0.2.0"
+version = "0.4.0"
 
 [deps]
+ASTParser = "3311a090-b55d-11e9-176d-dbdfc6a88253"
+DataTypesBasic = "83eed652-29e8-11e9-12da-a7c29d64ffc9"
+ProxyInterface = "90c4b210-f34a-11e9-1a87-5d0d3aaf0cab"
+SimpleMatch = "a3ae8450-d22f-11e9-3fe0-77240e25996f"
+StructEquality = "6ec83bb0-ed9f-11e9-3b4c-2b04cb4e219c"
 
 [extras]
+StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
 
 [targets]
 test = ["Test", "Suppressor", "StringDistances"]
