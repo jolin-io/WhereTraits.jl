@@ -1,5 +1,5 @@
 struct SortExpr
-  expr::Expr
+  expr::Any
 end
 
 # Base.isless(e1::Expr, e2::Expr) = _isless_sortexpr(e1, e2)
@@ -17,6 +17,6 @@ function _isless_sortexpr(l1::LineNumberNode, l2::LineNumberNode)
 end
 _isless_sortexpr(a1, a2) = true
 
-function sortexpr(a::Vector{Expr})
+function sortexpr(a::Vector)
   [s.expr for s in sort(SortExpr.(a))]
 end

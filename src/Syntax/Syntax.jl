@@ -1,5 +1,5 @@
 module Syntax
-export @traits, @traits_show_implementation
+export @traits, @traits_show_implementation, @traits_delete!
 
 using DataTypesBasic
 using ASTParser
@@ -28,18 +28,22 @@ function _traits(mod, func_parsed::Parsers.Function_Parsed)
   render(newfunc)
 end
 
-# TODO should we Deprecate this syntax?
-function _traits(mod, block_parsed::Parsers.Block_Parsed)
-  # @traits on block doesn't use any global state
-  store = TraitsStore()
-  parser = Matchers.AnyOf(Parsers.Function(), anything)
-  funcs = [p for p in [parser(a) for a in block_parsed.exprs] if p isa Parsers.Function]
-  for f in funcs
-    outerfunc, innerfunc = TraitsFunctionParsed(mod, f)
-    merge!(store, outerfunc, innerfunc)
-  end
-  render(store)
+function _traits(mod, parsed)
+  throw(ArgumentError("@traits macro expects function expression"))
 end
+
+# # TODO should we Deprecate this syntax?
+# function _traits(mod, block_parsed::Parsers.Block_Parsed)
+#   # @traits on block doesn't use any global state
+#   store = TraitsStore()
+#   parser = Matchers.AnyOf(Parsers.Function(), anything)
+#   funcs = [p for p in [parser(a) for a in block_parsed.exprs] if p isa Parsers.Function]
+#   for f in funcs
+#     outerfunc, innerfunc = TraitsFunctionParsed(mod, f)
+#     merge!(store, outerfunc, innerfunc)
+#   end
+#   render(store)
+# end
 
 # to get an easy fealing of what is going on and inspect errors
 macro traits_show_implementation(funcname)
@@ -47,8 +51,13 @@ macro traits_show_implementation(funcname)
 end
 
 function traits_show_implementation(mod, funcname)
+  mod, funcname = _true_mod_and_funcname(mod, funcname)
+  render(getorcreatestore!(mod, funcname))
+end
+
+function _true_mod_and_funcname(mod, funcname)
   parser = Matchers.AnyOf(Parsers.Symbol(), Parsers.NestedDot())
-  mod, funcname = @match(parser(funcname)) do f
+  @match(parser(funcname)) do f
     f(::Parsers.Symbol_Parsed) = mod, funcname
     function f(x::Parsers.NestedDot_Parsed)
       mod = getproperty(mod, x.base)
@@ -58,7 +67,24 @@ function traits_show_implementation(mod, funcname)
       mod, x.properties[end]
     end
   end
-  render(getorcreatestore!(mod, funcname))
+end
+
+"""
+  if you need to reset the traits definition of a certain function
+
+Needed if you had a wrong reference in the traits functions
+  which will always throw errors
+
+CAUTION: this DOES NOT delete plain function definitions, but only the extra traits information
+"""
+macro traits_delete!(funcname)
+  traits_delete!(__module__, funcname)
+  QuoteNode(nothing)
+end
+function traits_delete!(mod, funcname)
+  mod, funcname = _true_mod_and_funcname(mod, funcname)
+  key = (Symbol(string(mod)), funcname)
+  delete!(traits_store, key)
 end
 
 # Internal State of the syntax
@@ -66,7 +92,10 @@ end
 
 # this syntax is so complex that we need to store a state for each function
 
-const TraitsStore = TypeDict{Tuple{Any, Set}}
+const InnerFunc = Any
+const InnerFuncs = Dict{Any, Any}
+const OuterFunc = Any
+const TraitsStore = TypeDict{Tuple{OuterFunc, InnerFuncs}}
 # here all the states are stored which are needed to realize @traits macro
 const traits_store = Dict{Tuple{Symbol, Symbol}, TraitsStore}()
 
@@ -82,32 +111,50 @@ function getorcreatestore!(mod, funcname)
   end
 end
 
+function _merge_args_defaults(args_defaults1, args_defaults2)
+  @assert keys(args_defaults1) == keys(args_defaults2) "only supports merging args_defaults with same keys"
+  args_defaults = Dict{Symbol, Any}()
+  for (k, v) in args_defaults1
+    args_defaults[k] = _merge_default(v, args_defaults2[k])
+  end
+  args_defaults
+end
+_merge_default(::NoDefault, ::NoDefault) = nodefault
+_merge_default(::NoDefault, d) = d
+_merge_default(d, ::NoDefault) = d
+_merge_default(d1, d2) = d2  # the later overwrites the former
+
 function merge!(store, outerfunc, innerfunc)
   signature = outerfunc.fixed.signature
   if haskey(store, signature)
-    outerfunc′, innerfuncs = store[signature]
-    push!(innerfuncs, innerfunc)
+    outerfunc_old, innerfuncs = store[signature]
+    innerfuncs[innerfunc.fixed] = innerfunc.nonfixed
 
-    old_innerargs_traits = outerfunc′.innerargs_traits
-    new_innerargs_traits = sortexpr(unique([old_innerargs_traits; outerfunc.innerargs_traits]))
+    outerfunc_new_nonfixed = (
+      # like for normal functions, leaving out a default does not overwrite a previous default
+      # however setting a new default does so
+      args_defaults = _merge_args_defaults(outerfunc_old.nonfixed.args_defaults, outerfunc.nonfixed.args_defaults),
+      # we aggregate all unique traits and ensure order
+      innerargs_traits = sortexpr(unique([outerfunc_old.nonfixed.innerargs_traits; outerfunc.nonfixed.innerargs_traits])),
+    )
 
-    if  old_innerargs_traits == new_innerargs_traits
-      # nothing extra to be done
+    if  outerfunc_old.nonfixed == outerfunc_new_nonfixed
+      # only the new innerfunc is new
       # still we need outerfunc' for the information which traits are currently used in total
-      outerfunc′, innerfunc
+      outerfunc_old, innerfunc
     else
-      outerfunc′′ = (
-        # outerfunc.fixed == outerfunc′.fixed
-        fixed = outerfunc′.fixed,
-        innerargs_traits = new_innerargs_traits,
+      outerfunc_new = (
+        # outerfunc.fixed == outerfunc_old.fixed, because of same signature
+        fixed = outerfunc_old.fixed,
+        nonfixed = outerfunc_new_nonfixed,
       )
-      update = (outerfunc′′, innerfuncs)
+      update = (outerfunc_new, innerfuncs)
       store[signature] = update
       update
     end
   else
-    # TODO define Type for Set?
-    innerfuncs = Set([innerfunc])
+    innerfuncs = InnerFuncs()
+    innerfuncs[innerfunc.fixed] = innerfunc.nonfixed
     initial = (outerfunc, innerfuncs)
     store[signature] = initial
     initial
@@ -120,58 +167,66 @@ end
 
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
-_innerfunctionname(funcname) = Symbol(funcname, "_traits")
+_innerfunctionname(funcname) = Symbol("_", funcname, "_traits")
 
 function render(store::TraitsStore)
   exprs = []
   for (outerfunc, innerfuncs) in values(store)
     push!(exprs, render(outerfunc))
-    for innerfunc in innerfuncs
+    for (fixed, nonfixed) in innerfuncs
+      innerfunc = (fixed = fixed, nonfixed = nonfixed)
       push!(exprs, render(outerfunc, innerfunc))
     end
   end
   Expr(:block, exprs...)
 end
 
-function render(outerfunc_innerfuncs::Tuple{Any, Set})
+function render(outerfunc_innerfuncs::Tuple{OuterFunc, InnerFuncs})
   outerfunc, innerfuncs = outerfunc_innerfuncs
   exprs = []
   push!(exprs, render(outerfunc))
-  for innerfunc in innerfuncs
+  for (fixed, nonfixed) in innerfuncs
+    innerfunc = (fixed = fixed, nonfixed = nonfixed)
     push!(exprs, render(outerfunc, innerfunc))
   end
   Expr(:block, exprs...)
 end
 
-function render(outerfunc_innerfunc::Tuple{Any, Any})
+function render(outerfunc_innerfunc::Tuple{OuterFunc, InnerFunc})
   outerfunc, innerfunc = outerfunc_innerfunc
   render(outerfunc, innerfunc)
 end
 
 function _map_args(new_to_old, innerargs)
   map(innerargs) do a
-    get(new_to_old, a, :(_))
+    # pure _ is currently buggy, see https://github.com/JuliaLang/julia/issues/32727
+    # hence we use ::Any instead
+    get(new_to_old, a, :(::Any))
   end
 end
 
+"""
+render innerfunction
+(this is only possible with informations from outerfunc)
+"""
 function render(outerfunc, innerfunc)
   args = [
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
     :(::$(Type{outerfunc.fixed.signature}));
-    _map_args(innerfunc.args_mapping, outerfunc.fixed.innerargs_args);
+    _map_args(innerfunc.fixed.args_mapping, outerfunc.fixed.innerargs_args);
     :(::$_BetweenArgsAndTypeVars);
-    _map_args(innerfunc.typevars_mapping, outerfunc.fixed.innerargs_typevars);
+    _map_args(innerfunc.fixed.typevars_mapping, outerfunc.fixed.innerargs_typevars);
     :(::$_BetweenTypeVarsAndTraits);
-    _map_args(innerfunc.traits_mapping, outerfunc.innerargs_traits);
+    _map_args(innerfunc.fixed.traits_mapping, outerfunc.nonfixed.innerargs_traits);
   ]
   innerfunc_parsed = Parsers.Function_Parsed(
     name = _innerfunctionname(outerfunc.fixed.name),
     curlies = [],
     args = args,
-    kwargs = innerfunc.kwargs,
+    kwargs = innerfunc.nonfixed.kwargs,
     wheres = [],
-    body = innerfunc.body
+    body = innerfunc.nonfixed.body
   )
   toAST(innerfunc_parsed)
 end
@@ -185,7 +240,7 @@ function render(outerfunc)
     _BetweenArgsAndTypeVars();
     outerfunc.fixed.innerargs_typevars;
     _BetweenTypeVarsAndTraits();
-    outerfunc.innerargs_traits;
+    outerfunc.nonfixed.innerargs_traits;
   ]
   innerfunc_call = Parsers.Call_Parsed(
     name = _innerfunctionname(outerfunc.fixed.name),
@@ -193,10 +248,17 @@ function render(outerfunc)
     args = innerargs,
     kwargs = [:(kwargs...)],
   )
+
+  add_default(arg) = Parsers.Arg_Parsed(
+    name = arg.name,
+    type = arg.type,
+    default = outerfunc.nonfixed.args_defaults[arg.name]
+  )
+  outerargs = add_default.(outerfunc.fixed.args_parsed_without_defaults)
   outerfunc_parsed = Parsers.Function_Parsed(
     name = outerfunc.fixed.name,
     curlies = outerfunc.fixed.curlies,
-    args = outerfunc.fixed.args,
+    args = outerargs,
     kwargs = [:(kwargs...)],
     wheres = outerfunc.fixed.wheres,
     body = innerfunc_call
@@ -215,15 +277,30 @@ function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed)
   # =================
   args_names = [Parsers.Arg()(arg).name for arg in func_parsed.args]
   args_names_matcher = Matchers.AnyOf(args_names...)
+  # TODO we could also allow dispatch on keyword arguments
+  # kwargs_names = [Parsers.Arg()(kwarg).name for kwarg in func_parsed.kwargs]
+  # kwargs_names_matcher = Matchers.AnyOf(kwargs_names...)
+
   whereexpr_parser = Matchers.AnyOf(
     # we allow dispatch on arguments
     Named{:arg}(args_names_matcher), # interpreted as bool
     Named{:arg}(Parsers.TypeAnnotation(name=args_names_matcher)),
     Named{:arg}(Parsers.TypeRange(name=args_names_matcher)),
+
+    # TODO we could also allow dispatch on keyword arguments
+    # How? we store all kwargs per signature and then define traitfunctions like ``func(kwargs[:b])``
+    # Named{:kwarg}(kwargs_names_matcher), # interpreted as bool
+    # Named{:kwarg}(Parsers.TypeAnnotation(name=kwargs_names_matcher)),
+    # Named{:kwarg}(Parsers.TypeRange(name=kwargs_names_matcher)),
+
     # all other symbols refer to standard TypeVariables
+    # TypeAnnotation on TypeVar make only sense in the special case that the typevariable can take different types of binary type
+    # both Symbol and TypeRange are normal where syntax, TypeAnnotation is not
     Named{:normal}(Parsers.Symbol()),
+    Named{:typevar}(Parsers.TypeAnnotation(name=Parsers.Symbol())),
     Named{:normal}(Parsers.TypeRange(name=Parsers.Symbol())),
-    # we further allow to dispatch on functions from either args or standard typevars
+
+    # we further allow to dispatch on functions from either args, kwargs, or standard typevars
     # which should be all the rest
     Named{:func}(Parsers.Call()),  # interpreted as bool
     Named{:func}(Parsers.TypeAnnotation()),
@@ -283,33 +360,42 @@ function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed)
     curlies = func_parsed.curlies,
     args = func_parsed.args,
     kwargs = [],
+    # we need to use toAST here, as normalize_func expects a
+    # standard Function_Parsed, where wheres is a list of Expr
     wheres = toAST(normal_wheres),
     body = :nothing
   )
 
-  outerfunc_fixed, innerfunc = normalize_func(mod, outerfunc_parsed)
+  outerfunc, innerfunc_fixed = normalize_func(mod, outerfunc_parsed)
 
   @assert(
-    isempty(intersect(keys(innerfunc.args_mapping), keys(innerfunc.typevars_mapping))),
+    isempty(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))),
     "args and typevariables must not overlap!
-    Found $(intersect(keys(innerfunc.args_mapping), keys(innerfunc.typevars_mapping))) in both.")
-  old_to_new = Dict(v => k for (k, v) in merge(innerfunc.args_mapping, innerfunc.typevars_mapping))
+    Found $(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))) in both.")
+  old_to_new = Dict(v => k for (k, v) in merge(innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping))
   traits_normalized = _change_symbols(traits, old_to_new)
   traits_mapping = Dict(zip(traits_normalized, traits_matches))
   # we may encounter no traits at all, namely in the case where a default clause is defined
-  innerargs_traits = isempty(traits_normalized) ? Expr[] : sortexpr(unique(traits_normalized))
-  outerfunc = (
-    fixed = outerfunc_fixed,
-    innerargs_traits = innerargs_traits,
+  innerargs_traits = isempty(traits_normalized) ? [] : sortexpr(unique(traits_normalized))
+  outerfunc′ = (
+    fixed = outerfunc.fixed,
+    nonfixed = (
+      args_defaults = outerfunc.nonfixed.args_defaults,
+      innerargs_traits = innerargs_traits,
+    ),
   )
   innerfunc′ = (
-    body = func_parsed.body,
-    kwargs = func_parsed.kwargs,
-    args_mapping = innerfunc.args_mapping,
-    typevars_mapping = innerfunc.typevars_mapping,
-    traits_mapping = traits_mapping,
+    fixed = (
+      args_mapping = innerfunc_fixed.args_mapping,
+      typevars_mapping = innerfunc_fixed.typevars_mapping,
+      traits_mapping = traits_mapping,
+    ),
+    nonfixed = (
+      kwargs = func_parsed.kwargs,
+      body = func_parsed.body,
+    ),
   )
-  outerfunc, innerfunc′
+  outerfunc′, innerfunc′
 end
 
 _change_symbols(vec::Vector, symbol_mapping) = [_change_symbols(x, symbol_mapping) for x in vec]
@@ -328,13 +414,14 @@ function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
   args_parsed = map(Parsers.Arg(), func_parsed.args)
   typevar_new_to_old = Dict{Symbol, Symbol}()
   arg_new_to_old = Dict{Symbol, Symbol}()
+  arg_new_to_default = Dict{Symbol, Any}()
 
   countfrom_typevars = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
   countfrom_args = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
 
   # enumerate types
   # ---------------
-  # TODO rename this to signature?
+
   # we add _BetweenCurliesAndArgs to reuse ``type`` as identifying signature without mixing curly types and arg types
   typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
     _BetweenCurliesAndArgs, (toAST(a.type) for a in args_parsed)...)
@@ -355,24 +442,31 @@ function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
     new = normalized_arg_by_position(arg_position)
     arg_new_to_old[new] = a.name
     a.name = new
+    arg_new_to_default[new] = a.default
+    a.default = nodefault
   end
 
   # we return the whole signature to easily decide whether the function overwrites another
   outerfunc = (
-    signature = type,
-    name = func_parsed.name,
-    curlies = curlies_typeexprs_new,
-    args = toAST(args_parsed),
-    wheres = toAST(typevars_new),
-    # body information
-    innerargs_args = sort([a.name for a in args_parsed]),
-    innerargs_typevars = sort([tv.name for tv in typevars_new]),
+    fixed = (  # everything under fixed should be identifiable via signature
+      signature = type,
+      name = func_parsed.name,
+      curlies = curlies_typeexprs_new,
+      args_parsed_without_defaults = args_parsed,
+      wheres = typevars_new,
+      # body information
+      innerargs_args = sort([a.name for a in args_parsed]),
+      innerargs_typevars = sort([tv.name for tv in typevars_new]),
+    ),
+    nonfixed = (
+      args_defaults = arg_new_to_default,
+    ),
   )
-  innerfunc = (
+  innerfunc_fixed = (
     args_mapping = arg_new_to_old,
     typevars_mapping = typevar_new_to_old,
   )
-  outerfunc, innerfunc
+  outerfunc, innerfunc_fixed
 end
 
 normalized_typevar_by_position(position::Int) = TypeVar(Symbol("T", position))
