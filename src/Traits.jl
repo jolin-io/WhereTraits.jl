@@ -2,6 +2,7 @@ module Traits
 export @traits, @traits_show_implementation, @traits_delete!,
   isdef, Out, NotApplicable
 
+include("Utils/Utils.jl")
 include("Syntax/Syntax.jl")
 using .Syntax
 

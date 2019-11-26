@@ -2,12 +2,9 @@ using Traits
 using Test
 using ASTParser
 
-@testset "Utils" begin
-  include("utils.jl")
-end
-
 # Test standard dispatch
 # ======================
+
 @testset "standard dispatch" begin
   # s === standard
   @traits_delete! fs  # we need to delete because @testset uses closures which confuse the state of @traits
@@ -26,6 +23,7 @@ end
 
 # Test boolean dispatch
 # =====================
+
 @testset "bool dispatch" begin
   # b === bool
   @traits_delete! fb  # we need to delete because @testset uses closures which confuse the state of @traits
@@ -129,8 +127,8 @@ end
   # defaults will be preserved because they have been translated to extra methods
   # which are currently not tracked by @traits due to complexity
   # this is the same behaviour as for standard julia functions
-  @traits fda(a, b) = a + b + 99
-  @test fda(1) == 103
+  @traits fda(a, b) = a + b + 9
+  @test fda(1) == 13
   @test_throws MethodError fda()
 
   # but they can be overwritten as usual
@@ -141,14 +139,21 @@ end
   @traits fda(a) = 3 + a
   @test fda(1) == 4
 
-  # now default
-  @traits fda(a, b=50) = a + b + 99
-  @test fda(1) == 101
+  # also reassigning default values will overwrite main clause
+  @traits fda(a, b=50) = a + b + 999
+  @test fda(1) == 1050
+
+  # check that also traits get lowered correctly
+  @traits_delete! fda2
+  @traits fda2(a::A, b::B=50) where {A<:Number, B<:Number, eltype(A) == Int, A == B, eltype(b) <: Number} = a + b + 999
+  @traits_show_implementation fda2
+  @test fda2(1) == 1050  # should not throw "UndefVarError: B not defined"
+  @test_throws MethodError fda2(1.0)
+  @test_throws MethodError fda2(1.0, 4)
 end
 
 # Test kwargs
 # ===========
-
 
 @testset "default kwargs" begin
   @traits_delete! fdkw
@@ -166,16 +171,18 @@ end
   @test fdkw(1) == 4
 
   # overwriting works
-  @traits fdkw(a; b=50) = a + b + 99
-  @test fdkw(1) == 150
+  @traits fdkw(a; b=50) = a + b + 999
+  @test fdkw(1) == 1050
 
   # or more drastically by an overwrite
   @traits fdkw(a) = 3 + a
   @test fdkw(1) == 4
+
+  # overwriting again works too
+  @traits fdkw(a; b=50) = a + b + 999
+  @test fdkw(1) == 1050
 end
 
-# Test complex interactions (also with standard dispatch)
-# =======================================================
 
 # Test overwritability
 # ====================
@@ -203,10 +210,17 @@ end
   @test length(expr1.args) == length(expr4.args)
 end
 
+# Test varargs and varkwargs
+# ==========================
 
-# test internal details
-# =====================
+@testset "Vararg" begin
+  # super default case
+  @traits f(args...; kwargs...) = (args, kwargs)
 
-d1 = Dict(:k => 4, :a => 5)
-d2 = Dict(:k => 6, :a => nodefault)
-Traits.Syntax._merge_args_defaults(d1, d2) == Dict{Symbol, Any}(:k => 6, :a => 5)
+  Traits.Syntax._traits(@__MODULE__, :(
+    f(args...; kwargs...) = (args, kwargs)
+  ))
+  @Juno.enter Traits.Syntax._traits(@__MODULE__, :(
+    f(args...; kwargs...) = (args, kwargs)
+  ))
+end

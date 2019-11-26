@@ -1,6 +1,10 @@
 using Traits
 using Test
 
+@testset "Utils" begin
+  include("utils.jl")
+end
+
 @testset "syntax" begin
   include("syntax/syntax.jl")
 end

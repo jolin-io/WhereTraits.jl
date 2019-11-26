@@ -4,29 +4,43 @@ export @traits, @traits_show_implementation, @traits_delete!
 using DataTypesBasic
 using ASTParser
 using SimpleMatch
+using Traits.Utils
 include("astparser.jl")
-include("Utils/Utils.jl")
-using .Utils
-
+include("Lowering.jl")
+using .Lowering
 
 
 
 macro traits(expr)
-  # return nothing for now in order to not return implementation detail
-  Expr(:block, esc(_traits(__module__, expr)), nothing)
+  esc(_traits(__module__, expr))
 end
 
 function _traits(mod, expr::Expr)
-  parser = Matchers.AnyOf(Parsers.Function(), Parsers.Block())
+  parser = Matchers.AnyOf(Parsers.Function(), anything)
   _traits(mod, parser(expr))
 end
 
 function _traits(mod, func_parsed::Parsers.Function_Parsed)
   store = getorcreatestore!(mod, func_parsed.name)
-  outerfunc, innerfunc = TraitsFunctionParsed(mod, func_parsed)
-  newfunc = merge!(store, outerfunc, innerfunc)
-  render(newfunc)
+
+  basefunc, lowerings = lower_args_default(func_parsed)
+  basefunc_outer, basefunc_inner = TraitsFunctionParsed(mod, basefunc)
+  basefunc_new = merge!(store, basefunc_outer, basefunc_inner)
+
+  exprs = Expr[render(basefunc_new)]
+
+  for f in lowerings
+    # Lowerings have only dependencies on args get dropped,
+    # Dependencies on respective typevars still need to be dropped.
+    # Do this silently.
+    outerfunc, innerfunc = TraitsFunctionParsed(mod, f, on_traits_dropped = msg -> nothing)
+    newfunc = merge!(store, outerfunc, innerfunc)
+    push!(exprs, render(newfunc))
+  end
+  # finally return nothing in order to not return implementation detail
+  Expr(:block, exprs..., nothing)
 end
+
 
 function _traits(mod, parsed)
   throw(ArgumentError("@traits macro expects function expression"))
@@ -111,19 +125,6 @@ function getorcreatestore!(mod, funcname)
   end
 end
 
-function _merge_args_defaults(args_defaults1, args_defaults2)
-  @assert keys(args_defaults1) == keys(args_defaults2) "only supports merging args_defaults with same keys"
-  args_defaults = Dict{Symbol, Any}()
-  for (k, v) in args_defaults1
-    args_defaults[k] = _merge_default(v, args_defaults2[k])
-  end
-  args_defaults
-end
-_merge_default(::NoDefault, ::NoDefault) = nodefault
-_merge_default(::NoDefault, d) = d
-_merge_default(d, ::NoDefault) = d
-_merge_default(d1, d2) = d2  # the later overwrites the former
-
 function merge!(store, outerfunc, innerfunc)
   signature = outerfunc.fixed.signature
   if haskey(store, signature)
@@ -131,9 +132,6 @@ function merge!(store, outerfunc, innerfunc)
     innerfuncs[innerfunc.fixed] = innerfunc.nonfixed
 
     outerfunc_new_nonfixed = (
-      # like for normal functions, leaving out a default does not overwrite a previous default
-      # however setting a new default does so
-      args_defaults = _merge_args_defaults(outerfunc_old.nonfixed.args_defaults, outerfunc.nonfixed.args_defaults),
       # we aggregate all unique traits and ensure order
       innerargs_traits = sortexpr(unique([outerfunc_old.nonfixed.innerargs_traits; outerfunc.nonfixed.innerargs_traits])),
     )
@@ -249,16 +247,10 @@ function render(outerfunc)
     kwargs = [:(kwargs...)],
   )
 
-  add_default(arg) = Parsers.Arg_Parsed(
-    name = arg.name,
-    type = arg.type,
-    default = outerfunc.nonfixed.args_defaults[arg.name]
-  )
-  outerargs = add_default.(outerfunc.fixed.args_parsed_without_defaults)
   outerfunc_parsed = Parsers.Function_Parsed(
     name = outerfunc.fixed.name,
     curlies = outerfunc.fixed.curlies,
-    args = outerargs,
+    args = outerfunc.fixed.args,
     kwargs = [:(kwargs...)],
     wheres = outerfunc.fixed.wheres,
     body = innerfunc_call
@@ -271,8 +263,8 @@ end
 # Syntax Parser
 # =============
 
-TraitsFunctionParsed(mod, expr::Expr) = TraitsFunctionParsed(mod, Parsers.Function()(expr))
-function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed)
+TraitsFunctionParsed(mod, expr::Expr; kwargs...) = TraitsFunctionParsed(mod, Parsers.Function()(expr); kwargs...)
+function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed; on_traits_dropped = msg -> throw(ArgumentError(msg)))
   # Parse main syntax
   # =================
   args_names = [Parsers.Arg()(arg).name for arg in func_parsed.args]
@@ -366,21 +358,36 @@ function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed)
     body = :nothing
   )
 
-  outerfunc, innerfunc_fixed = normalize_func(mod, outerfunc_parsed)
+  outerfunc_fixed, innerfunc_fixed = normalize_func(mod, outerfunc_parsed)
 
   @assert(
     isempty(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))),
     "args and typevariables must not overlap!
     Found $(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))) in both.")
+
+  typevars_old = map(normal_wheres) do parsed
+    @match(parsed) do f
+      f(x::Parsers.Named_Parsed{:normal, Parsers.Symbol}) = x.expr.symbol
+      f(x::Parsers.Named_Parsed{:normal, Parsers.TypeRange}) = x.expr.name.symbol
+    end
+  end
+  kept_typevars_old = values(innerfunc_fixed.typevars_mapping)
+  dropped_typevars_old = [v for v in typevars_old if v ∉ kept_typevars_old]
+
+  traits_filtered = filter(t -> !depends_on(t, dropped_typevars_old), traits)
+  if length(traits) != length(traits_filtered)
+    traits_dropped = setdiff(traits, traits_filtered)
+    on_traits_dropped("Given traits depend on droppable typeparameters ($dropped_typevars_old). Traits: $traits_dropped")
+  end
+
   old_to_new = Dict(v => k for (k, v) in merge(innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping))
-  traits_normalized = _change_symbols(traits, old_to_new)
+  traits_normalized = _change_symbols(traits_filtered, old_to_new)
   traits_mapping = Dict(zip(traits_normalized, traits_matches))
   # we may encounter no traits at all, namely in the case where a default clause is defined
   innerargs_traits = isempty(traits_normalized) ? [] : sortexpr(unique(traits_normalized))
   outerfunc′ = (
-    fixed = outerfunc.fixed,
+    fixed = outerfunc_fixed,
     nonfixed = (
-      args_defaults = outerfunc.nonfixed.args_defaults,
       innerargs_traits = innerargs_traits,
     ),
   )
@@ -412,6 +419,7 @@ struct _BetweenCurliesAndArgs end
 normalize_func(mod, func_expr::Expr) = normalize_func(mod, Parsers.Function()(func_expr))
 function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
   args_parsed = map(Parsers.Arg(), func_parsed.args)
+  @assert all(arg -> arg.default isa NoDefault, args_parsed) "Can only normalize functions without positional default arguments"
   typevar_new_to_old = Dict{Symbol, Symbol}()
   arg_new_to_old = Dict{Symbol, Symbol}()
   arg_new_to_default = Dict{Symbol, Any}()
@@ -421,12 +429,14 @@ function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
 
   # enumerate types
   # ---------------
-
   # we add _BetweenCurliesAndArgs to reuse ``type`` as identifying signature without mixing curly types and arg types
   typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
     _BetweenCurliesAndArgs, (toAST(a.type) for a in args_parsed)...)
   typeexpr_full = :($typeexpr where {$(toAST(func_parsed.wheres)...)})
   type = Base.eval(mod, typeexpr_full)
+  # TODO make this simpler to read
+  # TODO do not distinguish between first and second level,
+  # but between three Type kinds and how they nest: Tuple, Vararg, other
   typebase, typevars = _split_typevar(type)
   typeexprs_new, typevars_new = normalize_typevars(typebase, typevars, typevar_new_to_old, countfrom_typevars)
 
@@ -442,31 +452,25 @@ function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
     new = normalized_arg_by_position(arg_position)
     arg_new_to_old[new] = a.name
     a.name = new
-    arg_new_to_default[new] = a.default
-    a.default = nodefault
   end
 
   # we return the whole signature to easily decide whether the function overwrites another
-  outerfunc = (
-    fixed = (  # everything under fixed should be identifiable via signature
-      signature = type,
-      name = func_parsed.name,
-      curlies = curlies_typeexprs_new,
-      args_parsed_without_defaults = args_parsed,
-      wheres = typevars_new,
-      # body information
-      innerargs_args = sort([a.name for a in args_parsed]),
-      innerargs_typevars = sort([tv.name for tv in typevars_new]),
-    ),
-    nonfixed = (
-      args_defaults = arg_new_to_default,
-    ),
+  outerfunc_fixed = (
+    # everything under fixed should be identifiable via signature
+    signature = type,
+    name = func_parsed.name,
+    curlies = curlies_typeexprs_new,
+    args = args_parsed,
+    wheres = typevars_new,
+    # body information
+    innerargs_args = sort([a.name for a in args_parsed]),
+    innerargs_typevars = sort([tv.name for tv in typevars_new]),
   )
   innerfunc_fixed = (
     args_mapping = arg_new_to_old,
     typevars_mapping = typevar_new_to_old,
   )
-  outerfunc, innerfunc_fixed
+  outerfunc_fixed, innerfunc_fixed
 end
 
 normalized_typevar_by_position(position::Int) = TypeVar(Symbol("T", position))
@@ -480,6 +484,11 @@ function _split_typevar(t::UnionAll)
   base, [t.var; typevars...]
 end
 
+"""
+traverses a given type, renaming all typeparameters to normalized name
+
+returns type with substituted typevars + list of function level typevars
+"""
 function normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
   typeexprs = []
   typevars = TypeVar[]
@@ -493,7 +502,14 @@ end
 # the very first level treats UnionAlls differently in that they will become function where typevariables
 function _normalize_typevars1(type::UnionAll, typevars_old, typevar_new_to_old, countfrom)
   typebase, extra_typevars = _split_typevar(type)
-  _normalize_typevars(typebase, [typevars_old; extra_typevars], typevar_new_to_old, countfrom)
+  # if typebase.name.wrapper === Vararg
+  if typebase.name.name == :Vararg
+    # Vararg behave different than all other types when used as TypeVar for Tuple, namely
+    # Tuple{Vararg{T} where T} != (Tuple{Vararg{T}} where T)
+    # which is the same as all subsequent levels
+    _normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
+  else
+    _normalize_typevars(typebase, [typevars_old; extra_typevars], typevar_new_to_old, countfrom)
 end
 function _normalize_typevars1(type, typevars_old, typevar_new_to_old, countfrom)
   _normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
@@ -501,6 +517,7 @@ end
 
 function _normalize_typevars(type::DataType, typevars_old, typevar_new_to_old, countfrom::Base.Iterators.Stateful)
   if isabstracttype(type)
+    # TODO how does this case behave recursively?
     i = next(countfrom)
     new = normalized_typevar_by_position(i, type)
     new.name, [new]
