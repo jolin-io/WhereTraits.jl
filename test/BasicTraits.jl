@@ -3,7 +3,7 @@ using Test
 
 # we only test for subset relationship because traits might be added during this test run
 @test isbitstype(Int)
-@test isitable(Int)
+@test isiterable(Int)
 @test isimmutable(Int)
 @test isconcretetype(Int)
 

@@ -9,8 +9,6 @@ using ASTParser
   # s === standard
   @traits_delete! fs  # we need to delete because @testset uses closures which confuse the state of @traits
   @traits fs(a::A) where {A} = A
-  @traits_show_implementation fs
-
   @test fs(1) == Int
   @test fs("hi") == String
   @test_throws MethodError fs(1, 2)
@@ -213,14 +211,37 @@ end
 # Test varargs and varkwargs
 # ==========================
 
-@testset "Vararg" begin
+@testset "Vararg varkwarg" begin
   # super default case
+  @traits_delete! f
   @traits f(args...; kwargs...) = (args, kwargs)
+  @traits_show_implementation f
 
-  Traits.Syntax._traits(@__MODULE__, :(
-    f(args...; kwargs...) = (args, kwargs)
-  ))
-  @Juno.enter Traits.Syntax._traits(@__MODULE__, :(
-    f(args...; kwargs...) = (args, kwargs)
-  ))
+  a, k = f(1,2,3,4, a=4, b=5)
+  @test a == (1,2,3,4)
+  @test k[:a] == 4
+  @test k[:b] == 5
+  @test sort(collect(keys(k))) == [:a, :b]
 end
+
+
+# Test complex type dispatch
+# ==========================
+
+# Tuple{Tuple{Tuple{Vector{Some}}, Vararg}}
+
+@testset "complex dispatch" begin
+  @traits g(a::Tuple{Number, Tuple{Int, Vector}}) = 1
+
+  @traits function g(a::Tuple{Number, Tuple{Int, T}}) where {T <: Vector, eltype(T)::Type{Int}}
+    2
+  end
+  @test g((1.0, (2, [:a, :b]))) == 1
+  @test g((1.0, (2, [1, 2]))) == 2
+end
+
+# TODO add case with Union type
+# TODO add case for diagonal dispatch `f(a::T, b::T) where T`
+# TODO add case for arg without name
+
+# TODO add case for function in submodule like ``@traits mysubmodule.myfunc(a) = 4``

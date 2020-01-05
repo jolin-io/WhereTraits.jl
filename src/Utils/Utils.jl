@@ -1,9 +1,9 @@
 module Utils
-export iftrue, next, filtersplit, depends_on,
+export iftrue, next!, filtersplit, depends_on,
   TypeDict,
   SortExpr, sortexpr
 
-next(iter::Base.Iterators.Stateful) = iterate(iter)[1]
+next!(iter::Base.Iterators.Stateful) = iterate(iter)[1]
 
 macro iftrue(expr)
   expr = esc(expr)

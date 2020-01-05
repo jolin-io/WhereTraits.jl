@@ -4,45 +4,67 @@ export @traits, @traits_show_implementation, @traits_delete!
 using DataTypesBasic
 using ASTParser
 using SimpleMatch
+using Traits: CONFIG
 using Traits.Utils
 include("astparser.jl")
 include("Lowering.jl")
 using .Lowering
+include("NormalizeType.jl")
+using .NormalizeType
+using Suppressor
+using ProxyInterface
 
+# flatten out blocks
+flatten_blocks(expr::Expr) = flatten_blocks(Val{expr.head}(), expr.args)
+flatten_blocks(any) = any
+flatten_blocks(::Val{head}, args) where head = Expr(head, flatten_blocks.(args)...)
+function flatten_blocks(head::Val{:block}, args)
+  args′ = flatten_blocks.(args)
+  args′′ = [((a isa Expr && a.head == :block) ? a.args : [a] for a in args′)...;]
+  Expr(:block, args′′...)
+end
 
-
+"""
+@traits f(a, b) where {!isempty(a), !isempty(b)} = (a[1], b[1])
+"""
 macro traits(expr)
-  esc(_traits(__module__, expr))
+  expr′ = macroexpand(__module__, expr)
+  expr_traits = _traits(__module__, expr′)
+  # :(eval($(QuoteNode(...))) is a workaround for @testset, see https://github.com/JuliaLang/julia/issues/34263
+  expr_traits = :(eval($(QuoteNode(expr_traits))))
+  expr_traits = esc(expr_traits)
+  if CONFIG.suppress_on_traits_definitions
+    expr_traits = :(@suppress $expr_traits)
+  end
+  expr_traits
 end
 
 function _traits(mod, expr::Expr)
   parser = Matchers.AnyOf(Parsers.Function(), anything)
-  _traits(mod, parser(expr))
+  _traits_parsed(mod, parser(expr))
 end
 
-function _traits(mod, func_parsed::Parsers.Function_Parsed)
+function _traits_parsed(mod, func_parsed::Parsers.Function_Parsed)
   store = getorcreatestore!(mod, func_parsed.name)
 
   basefunc, lowerings = lower_args_default(func_parsed)
   basefunc_outer, basefunc_inner = TraitsFunctionParsed(mod, basefunc)
   basefunc_new = merge!(store, basefunc_outer, basefunc_inner)
 
-  exprs = Expr[render(basefunc_new)]
+  exprs = Expr[render(mod, store, basefunc_new)]
 
   for f in lowerings
-    # Lowerings have only dependencies on args get dropped,
-    # Dependencies on respective typevars still need to be dropped.
-    # Do this silently.
-    outerfunc, innerfunc = TraitsFunctionParsed(mod, f, on_traits_dropped = msg -> nothing)
-    newfunc = merge!(store, outerfunc, innerfunc)
-    push!(exprs, render(newfunc))
+    # As lowering dropped variables, also traits may need to be dropped. Do this silently.
+    lowered_outer, lowered_inner = TraitsFunctionParsed(mod, f, on_traits_dropped = msg -> nothing)
+    lowered_new = merge!(store, lowered_outer, lowered_inner)
+    push!(exprs, render(mod, store, lowered_new))
   end
   # finally return nothing in order to not return implementation detail
-  Expr(:block, exprs..., nothing)
+  flatten_blocks(Expr(:block, exprs..., nothing))
 end
 
 
-function _traits(mod, parsed)
+function _traits_parsed(mod, parsed)
   throw(ArgumentError("@traits macro expects function expression"))
 end
 
@@ -66,7 +88,7 @@ end
 
 function traits_show_implementation(mod, funcname)
   mod, funcname = _true_mod_and_funcname(mod, funcname)
-  render(getorcreatestore!(mod, funcname))
+  render(mod, getorcreatestore!(mod, funcname))
 end
 
 function _true_mod_and_funcname(mod, funcname)
@@ -96,8 +118,7 @@ macro traits_delete!(funcname)
   QuoteNode(nothing)
 end
 function traits_delete!(mod, funcname)
-  mod, funcname = _true_mod_and_funcname(mod, funcname)
-  key = (Symbol(string(mod)), funcname)
+  key = unique_funcname(mod, funcname)
   delete!(traits_store, key)
 end
 
@@ -109,17 +130,55 @@ end
 const InnerFunc = Any
 const InnerFuncs = Dict{Any, Any}
 const OuterFunc = Any
-const TraitsStore = TypeDict{Tuple{OuterFunc, InnerFuncs}}
-# here all the states are stored which are needed to realize @traits macro
-const traits_store = Dict{Tuple{Symbol, Symbol}, TraitsStore}()
+const SignatureDict = TypeDict{Tuple{OuterFunc, InnerFuncs}}
+struct Reference
+  mod::Module
+  name::Symbol
+end
+ASTParser.toAST(r::Reference) = :($(r.mod).$(r.name))
+
+struct TraitsStore
+  # we need to be able to overwrite not only the outer function, but also the inner function
+  # hence we need a global reference for the inner function
+  # as we cannot assume that the original function already used traits, we store the inner function
+  # as part of every TraitsStore
+  global_innerfunction_reference::Reference
+  # maps a type signature to the respective outerfunction with possible several innerfunction-definitions
+  definitions::SignatureDict
+  TraitsStore(global_innerfunction_reference::Reference) = new(global_innerfunction_reference, SignatureDict())
+end
+ProxyInterface.dict(store::TraitsStore) = store.definitions
+ProxyInterface.dict(Store::Type{TraitsStore}) = SignatureDict
+ProxyInterface.@dict_mutable TraitsStore
+
+# here the internal state for the @traits macro is stored for each functionname respectively
+const traits_store = Dict{Symbol, TraitsStore}()
+
+function unique_funcname(mod, funcname)
+  mod′, funcname′ = normalize_mod_and_name(mod, funcname)
+  Symbol(mod′, :., funcname′)
+end
+function normalize_mod_and_name(mod, name)
+  parser = Matchers.AnyOf(Parsers.Symbol(), Parsers.NestedDot())
+  normalize_mod_and_name(mod, parser(name))
+end
+normalize_mod_and_name(mod, name::Parsers.Symbol_Parsed) = mod, name.symbol
+function normalize_mod_and_name(mod, name::Parsers.NestedDot_Parsed)
+  mod′::Module = getproperty(mod, name.base)
+  for field in name.properties[1:end-1]
+    mod′ = getproperty(mod′, field)
+  end
+  mod′, name.properties[end]  # NestedDot.properties is known to be non-empty
+end
 
 function getorcreatestore!(mod, funcname)
-  storename = Symbol(funcname, "_traitsstore")
-  key = (Symbol(string(mod)), funcname)
-  store = if haskey(traits_store, key)
+  key = unique_funcname(mod, funcname)
+  if haskey(traits_store, key)
     traits_store[key]
   else
-    newstore = TraitsStore()
+    inner_function_name = Symbol("'", "__traits__.", key, "'")
+    global_inner_function_reference = Reference(mod, inner_function_name)
+    newstore = TraitsStore(global_inner_function_reference)
     traits_store[key] = newstore
     newstore
   end
@@ -163,41 +222,44 @@ end
 # Render
 # ======
 
+# we use special Singletons as separators to distinguish different kinds of parameters
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
-_innerfunctionname(funcname) = Symbol("_", funcname, "_traits")
 
-function render(store::TraitsStore)
+# render needs the module where it should render, because the syntax ``MyModule.B(args) = ...`` does only work for
+# method overloading (where it is the only syntax), but not for DEFINING the same function initially. (For that you
+# need to be within MyModule and execute ``B(args) = ...``)
+function render(mod::Module, store::TraitsStore)
   exprs = []
   for (outerfunc, innerfuncs) in values(store)
-    push!(exprs, render(outerfunc))
+    push!(exprs, render(mod, store, outerfunc))
     for (fixed, nonfixed) in innerfuncs
       innerfunc = (fixed = fixed, nonfixed = nonfixed)
-      push!(exprs, render(outerfunc, innerfunc))
+      push!(exprs, render(mod, store, outerfunc, innerfunc))
     end
   end
-  Expr(:block, exprs...)
+  flatten_blocks(Expr(:block, exprs...))
 end
 
-function render(outerfunc_innerfuncs::Tuple{OuterFunc, InnerFuncs})
+function render(mod::Module, store::TraitsStore, outerfunc_innerfuncs::Tuple{OuterFunc, InnerFuncs})
   outerfunc, innerfuncs = outerfunc_innerfuncs
   exprs = []
-  push!(exprs, render(outerfunc))
+  push!(exprs, render(mod, store, outerfunc))
   for (fixed, nonfixed) in innerfuncs
     innerfunc = (fixed = fixed, nonfixed = nonfixed)
-    push!(exprs, render(outerfunc, innerfunc))
+    push!(exprs, render(mod, store, outerfunc, innerfunc))
   end
-  Expr(:block, exprs...)
+  flatten_blocks(Expr(:block, exprs...))
 end
 
-function render(outerfunc_innerfunc::Tuple{OuterFunc, InnerFunc})
+function render(mod::Module, store::TraitsStore, outerfunc_innerfunc::Tuple{OuterFunc, InnerFunc})
   outerfunc, innerfunc = outerfunc_innerfunc
-  render(outerfunc, innerfunc)
+  render(mod, store, outerfunc, innerfunc)
 end
 
 function _map_args(new_to_old, innerargs)
   map(innerargs) do a
-    # pure _ is currently buggy, see https://github.com/JuliaLang/julia/issues/32727
+    # pure ``_`` is currently buggy, see https://github.com/JuliaLang/julia/issues/32727
     # hence we use ::Any instead
     get(new_to_old, a, :(::Any))
   end
@@ -207,7 +269,7 @@ end
 render innerfunction
 (this is only possible with informations from outerfunc)
 """
-function render(outerfunc, innerfunc)
+function render(mod::Module, store::TraitsStore, outerfunc, innerfunc)
   args = [
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
@@ -218,8 +280,16 @@ function render(outerfunc, innerfunc)
     :(::$_BetweenTypeVarsAndTraits);
     _map_args(innerfunc.fixed.traits_mapping, outerfunc.nonfixed.innerargs_traits);
   ]
+  name = store.global_innerfunction_reference
+  if mod === name.mod
+    # if we are rendering code for the same module, we need to drop the module information
+    # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+    # for the initial definition
+    name = name.name
+  end
+
   innerfunc_parsed = Parsers.Function_Parsed(
-    name = _innerfunctionname(outerfunc.fixed.name),
+    name = name,
     curlies = [],
     args = args,
     kwargs = innerfunc.nonfixed.kwargs,
@@ -229,7 +299,7 @@ function render(outerfunc, innerfunc)
   toAST(innerfunc_parsed)
 end
 
-function render(outerfunc)
+function render(mod::Module, store::TraitsStore, outerfunc)
   innerargs = [
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
@@ -241,7 +311,7 @@ function render(outerfunc)
     outerfunc.nonfixed.innerargs_traits;
   ]
   innerfunc_call = Parsers.Call_Parsed(
-    name = _innerfunctionname(outerfunc.fixed.name),
+    name = store.global_innerfunction_reference,
     curlies = [],
     args = innerargs,
     kwargs = [:(kwargs...)],
@@ -255,7 +325,8 @@ function render(outerfunc)
     wheres = outerfunc.fixed.wheres,
     body = innerfunc_call
   )
-  toAST(outerfunc_parsed)
+  # the outer function should become documented
+  :(Base.@__doc__ $(toAST(outerfunc_parsed)))
 end
 
 
@@ -420,40 +491,36 @@ normalize_func(mod, func_expr::Expr) = normalize_func(mod, Parsers.Function()(fu
 function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
   args_parsed = map(Parsers.Arg(), func_parsed.args)
   @assert all(arg -> arg.default isa NoDefault, args_parsed) "Can only normalize functions without positional default arguments"
-  typevar_new_to_old = Dict{Symbol, Symbol}()
-  arg_new_to_old = Dict{Symbol, Symbol}()
-  arg_new_to_default = Dict{Symbol, Any}()
 
-  countfrom_typevars = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
-  countfrom_args = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
-
-  # enumerate types
+  # normalize types
   # ---------------
   # we add _BetweenCurliesAndArgs to reuse ``type`` as identifying signature without mixing curly types and arg types
   typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
     _BetweenCurliesAndArgs, (toAST(a.type) for a in args_parsed)...)
   typeexpr_full = :($typeexpr where {$(toAST(func_parsed.wheres)...)})
   type = Base.eval(mod, typeexpr_full)
-  # TODO make this simpler to read
-  # TODO do not distinguish between first and second level,
-  # but between three Type kinds and how they nest: Tuple, Vararg, other
-  typebase, typevars = _split_typevar(type)
-  typeexprs_new, typevars_new = normalize_typevars(typebase, typevars, typevar_new_to_old, countfrom_typevars)
+  typebase, typevars_old = split_typevar(type)  # typebase == Tuple{P1, P2, P3, ...}
+  typeexprs_new, typevars_new, typevar_new_to_old = normalize_typevars(typebase.parameters, typevars_old)
 
   curlies_typeexprs_new = typeexprs_new[1:length(func_parsed.curlies)]
   args_typeexprs_new = typeexprs_new[length(func_parsed.curlies)+2:end]  # + 2 because of _BetweenCurliesAndArgs
 
+  # normalize args
+  # --------------
+  arg_new_to_old = Dict{Symbol, Symbol}()
+  countfrom_args = Base.Iterators.Stateful(Base.Iterators.countfrom(1))
   for (a, type) in zip(args_parsed, args_typeexprs_new)
     a.type = type
-
-    # enumerate args
-    # --------------
-    arg_position = next(countfrom_args)
+    arg_position = next!(countfrom_args)
     new = normalized_arg_by_position(arg_position)
-    arg_new_to_old[new] = a.name
+    if !isnothing(a.name)  # might be an arg without name
+      arg_new_to_old[new] = a.name
+    end
     a.name = new
   end
 
+  # return
+  # ------
   # we return the whole signature to easily decide whether the function overwrites another
   outerfunc_fixed = (
     # everything under fixed should be identifiable via signature
@@ -473,90 +540,6 @@ function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
   outerfunc_fixed, innerfunc_fixed
 end
 
-normalized_typevar_by_position(position::Int) = TypeVar(Symbol("T", position))
-normalized_typevar_by_position(position::Int, ub) = TypeVar(Symbol("T", position), ub)
-normalized_typevar_by_position(position::Int, lb, ub) = TypeVar(Symbol("T", position), lb, ub)
 normalized_arg_by_position(position::Int) = Symbol("a", position)
-
-_split_typevar(base) = base, []
-function _split_typevar(t::UnionAll)
-  base, typevars = _split_typevar(t.body)
-  base, [t.var; typevars...]
-end
-
-"""
-traverses a given type, renaming all typeparameters to normalized name
-
-returns type with substituted typevars + list of function level typevars
-"""
-function normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
-  typeexprs = []
-  typevars = TypeVar[]
-  for p in type.parameters
-    _typeexpr, _typevars = _normalize_typevars1(p, typevars_old, typevar_new_to_old, countfrom)
-    push!(typeexprs, _typeexpr)
-    append!(typevars, _typevars)
-  end
-  typeexprs, typevars
-end
-# the very first level treats UnionAlls differently in that they will become function where typevariables
-function _normalize_typevars1(type::UnionAll, typevars_old, typevar_new_to_old, countfrom)
-  typebase, extra_typevars = _split_typevar(type)
-  # if typebase.name.wrapper === Vararg
-  if typebase.name.name == :Vararg
-    # Vararg behave different than all other types when used as TypeVar for Tuple, namely
-    # Tuple{Vararg{T} where T} != (Tuple{Vararg{T}} where T)
-    # which is the same as all subsequent levels
-    _normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
-  else
-    _normalize_typevars(typebase, [typevars_old; extra_typevars], typevar_new_to_old, countfrom)
-end
-function _normalize_typevars1(type, typevars_old, typevar_new_to_old, countfrom)
-  _normalize_typevars(type, typevars_old, typevar_new_to_old, countfrom)
-end
-
-function _normalize_typevars(type::DataType, typevars_old, typevar_new_to_old, countfrom::Base.Iterators.Stateful)
-  if isabstracttype(type)
-    # TODO how does this case behave recursively?
-    i = next(countfrom)
-    new = normalized_typevar_by_position(i, type)
-    new.name, [new]
-  else
-    if isempty(type.parameters)
-      type, TypeVar[]
-    else
-      # recurse
-      typeexprs = []
-      typevars = TypeVar[]
-      for p in type.parameters
-        _typeexpr, _typevars = _normalize_typevars(p, typevars_old, typevar_new_to_old, countfrom)
-        push!(typeexprs, _typeexpr)
-        append!(typevars, _typevars)
-      end
-      Expr(:curly, Base.unwrap_unionall(type).name.name, typeexprs...), typevars
-    end
-  end
-end
-
-function _normalize_typevars(tv::TypeVar, typevars_old, typevar_new_to_old, countfrom::Base.Iterators.Stateful)
-  if tv in typevars_old
-    i = next(countfrom)
-    new = normalized_typevar_by_position(i, tv.lb, tv.ub)
-    typevar_new_to_old[new.name] = tv.name
-    new.name, [new]
-  else  # this might be a nested UnionAll somewhere
-    tv.name, TypeVar[]
-  end
-end
-function _normalize_typevars(type::UnionAll, typevars_old, typevar_new_to_old, countfrom)
-  typebase, typevars_unionall = _split_typevar(type)
-  typebase_expr_new, typevars_new = _normalize_typevars(typebase, typevars_old, typevar_new_to_old, countfrom)
-  _expr_rewrap_typevars(typebase_expr_new, typevars_unionall), typevars_new
-end
-_normalize_typevars(any, typevars_old, typevar_new_to_old, countfrom) = any, TypeVar[]
-
-function _expr_rewrap_typevars(typeexpr::Expr, typevars)
-  Expr(:where, typeexpr, toAST.(typevars)...)
-end
 
 end # module
