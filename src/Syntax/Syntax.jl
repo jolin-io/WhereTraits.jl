@@ -1,5 +1,5 @@
 module Syntax
-export @traits, @traits_show_implementation, @traits_delete!
+export @traits, @traits_test, @traits_show_implementation, @traits_delete!
 
 using DataTypesBasic
 using ASTParser
@@ -30,6 +30,22 @@ end
 macro traits(expr)
   expr′ = macroexpand(__module__, expr)
   expr_traits = _traits(__module__, expr′)
+  expr_traits = esc(expr_traits)
+  if CONFIG.suppress_on_traits_definitions
+    expr_traits = :(@suppress $expr_traits)
+  end
+  expr_traits
+end
+
+
+"""
+like @traits, and works within Test.@testset, but cannot be doc-stringed
+
+needed because of https://github.com/JuliaLang/julia/issues/34263
+"""
+macro traits_test(expr)
+  expr′ = macroexpand(__module__, expr)
+  expr_traits = _traits(__module__, expr′)
   # :(eval($(QuoteNode(...))) is a workaround for @testset, see https://github.com/JuliaLang/julia/issues/34263
   expr_traits = :(eval($(QuoteNode(expr_traits))))
   expr_traits = esc(expr_traits)
@@ -38,6 +54,7 @@ macro traits(expr)
   end
   expr_traits
 end
+
 
 function _traits(mod, expr::Expr)
   parser = Matchers.AnyOf(Parsers.Function(), anything)

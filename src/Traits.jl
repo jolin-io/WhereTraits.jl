@@ -1,5 +1,5 @@
 module Traits
-export @traits, @traits_show_implementation, @traits_delete!,
+export @traits, @traits_test, @traits_show_implementation, @traits_delete!,
   isdef, Out, NotApplicable
 
 @Base.kwdef mutable struct _Config
