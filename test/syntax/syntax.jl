@@ -4,6 +4,7 @@ using ASTParser
 
 # Test standard dispatch
 # ======================
+@macroexpand @traits g(a) = a
 
 @testset "standard dispatch" begin
   # s === standard
@@ -231,6 +232,7 @@ end
 # Tuple{Tuple{Tuple{Vector{Some}}, Vararg}}
 
 @testset "complex dispatch" begin
+  @traits_delete! g
   @traits_test g(a::Tuple{Number, Tuple{Int, Vector}}) = 1
 
   @traits_test function g(a::Tuple{Number, Tuple{Int, T}}) where {T <: Vector, eltype(T)::Type{Int}}
@@ -245,3 +247,5 @@ end
 # TODO add case for arg without name
 
 # TODO add case for function in submodule like ``@traits_test mysubmodule.myfunc(a) = 4``
+# TODO add case for overwriting same target function from different modules like ``@traits Target.myfunc(...)`` from
+# both module A and module B

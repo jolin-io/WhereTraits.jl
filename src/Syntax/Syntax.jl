@@ -62,13 +62,13 @@ function _traits(mod, expr::Expr)
 end
 
 function _traits_parsed(mod, func_parsed::Parsers.Function_Parsed)
-  store = getorcreatestore!(mod, func_parsed.name)
+  mod_traitsdef, store = getorcreatestore!(mod, func_parsed.name)
 
   basefunc, lowerings = lower_args_default(func_parsed)
   basefunc_outer, basefunc_inner = TraitsFunctionParsed(mod, basefunc)
   basefunc_new = merge!(store, basefunc_outer, basefunc_inner)
 
-  exprs = Expr[render(mod, store, basefunc_new)]
+  exprs = Expr[render_store_reference(mod, store), render(mod, store, basefunc_new)]
 
   for f in lowerings
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
@@ -104,8 +104,8 @@ macro traits_show_implementation(funcname)
 end
 
 function traits_show_implementation(mod, funcname)
-  mod, funcname = _true_mod_and_funcname(mod, funcname)
-  render(mod, getorcreatestore!(mod, funcname))
+  mod_traitsdef, store = getorcreatestore!(mod, funcname)
+  render(mod, store)
 end
 
 function _true_mod_and_funcname(mod, funcname)
@@ -150,6 +150,7 @@ const OuterFunc = Any
 const SignatureDict = TypeDict{Tuple{OuterFunc, InnerFuncs}}
 struct Reference
   mod::Module
+  isoriginalmodule::Bool
   name::Symbol
 end
 ASTParser.toAST(r::Reference) = :($(r.mod).$(r.name))
@@ -168,9 +169,14 @@ ProxyInterface.dict(store::TraitsStore) = store.definitions
 ProxyInterface.dict(Store::Type{TraitsStore}) = SignatureDict
 ProxyInterface.@dict_mutable TraitsStore
 
-# here the internal state for the @traits macro is stored for each functionname respectively
-const traits_store = Dict{Symbol, TraitsStore}()
+# here the reference to the internal state for the @traits macro is stored for each functionname respectively
+# if the function has no key, then it is defined in the original module
+const traits_store = Dict{Symbol, Reference}()
 
+function unique_inner_function_name(mod, funcname)
+  key = unique_funcname(mod, funcname)
+  Symbol("'", "__traits__.", key, "'")
+end
 function unique_funcname(mod, funcname)
   mod′, funcname′ = normalize_mod_and_name(mod, funcname)
   Symbol(mod′, :., funcname′)
@@ -189,15 +195,25 @@ function normalize_mod_and_name(mod, name::Parsers.NestedDot_Parsed)
 end
 
 function getorcreatestore!(mod, funcname)
-  key = unique_funcname(mod, funcname)
-  if haskey(traits_store, key)
-    traits_store[key]
+  mod_original, _ = normalize_mod_and_name(mod, funcname)
+  inner_function_name = unique_inner_function_name(mod, funcname)
+  if hasproperty(mod_original, inner_function_name)
+    # call with no args to get the store
+    mod_original, getproperty(mod_original, inner_function_name)()
+  elseif haskey(traits_store, inner_function_name)
+    ref = traits_store[inner_function_name]
+    # call with no args to get the store
+    ref.mod, getproperty(ref.mod, ref.name)()
   else
-    inner_function_name = Symbol("'", "__traits__.", key, "'")
-    global_inner_function_reference = Reference(mod, inner_function_name)
-    newstore = TraitsStore(global_inner_function_reference)
-    traits_store[key] = newstore
-    newstore
+    # if nothing is defined yet default to current module `mod` for definition
+    # as we can define new things only in the current module
+    isoriginalmodule = mod === mod_original
+    ref = Reference(mod, isoriginalmodule, inner_function_name)
+    if !isoriginalmodule
+      # if we are not in the original module we need to store the reference for others to find the traits definitions
+      traits_store[inner_function_name] = ref
+    end
+    mod, TraitsStore(ref)
   end
 end
 
@@ -242,6 +258,19 @@ end
 # we use special Singletons as separators to distinguish different kinds of parameters
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
+
+function render_store_reference(mod::Module, store::TraitsStore)
+  name = store.global_innerfunction_reference
+  if mod === name.mod
+    # if we are rendering code for the same module, we need to drop the module information
+    # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+    # for the initial definition
+    name = name.name
+  end
+  :(function $(toAST(name))()
+    $store
+  end)
+end
 
 # render needs the module where it should render, because the syntax ``MyModule.B(args) = ...`` does only work for
 # method overloading (where it is the only syntax), but not for DEFINING the same function initially. (For that you
