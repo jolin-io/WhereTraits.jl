@@ -72,7 +72,7 @@ end
 function _normalize_typevars(type::Type, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only::True)
   typebase, extra_typevars = split_typevar(type)
   name = _name(typebase)
-
+  
   if name === :Vararg
     # Vararg behave different than all other types when used as TypeVar for Tuple, namely
     # Tuple{Vararg{T} where T} != (Tuple{Vararg{T}} where T)
@@ -147,8 +147,14 @@ function _normalize_typevars(tv::TypeVar, typevar_context, typevar_old_to_new!, 
   end
 end
 
-function _normalize_typevars(type::Union, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only::TrueFalse)
-  _collect_union_types(type)
+# we need to solve ambiguities with type::Union (vs type::Type) and tuple_parents_only::TrueFalse (vs ::True)
+function _normalize_typevars(type::Union, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only::True)
+  _normalize_typevars_unions(type, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only)
+end
+function _normalize_typevars(type::Union, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only::False)
+  _normalize_typevars_unions(type, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only)
+end
+function _normalize_typevars_unions(type::Union, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only::TrueFalse)
   typeexprs, typevars = _normalize_typevars(_collect_union_types(type), typevar_context, typevar_old_to_new!, countfrom!, False())
   Expr(:curly, :Union, typeexprs...), typevars
 end
@@ -200,8 +206,8 @@ end
 
 # anything else, like Int or Symbol TypeVars
 _normalize_typevars(any, typevars_old, typevar_old_to_new!, countfrom!, ::TrueFalse) = any, []
-_normalize_typevars(bounds::Union{Type{Any}, Type{Union{}}}, _, _, _, ::True) = bounds, []
-_normalize_typevars(bounds::Union{Type{Any}, Type{Union{}}}, _, _, _, ::False) = bounds, []
+_normalize_typevars(bounds::Type{Union{}}, _, _, _, ::True) = bounds, []
+_normalize_typevars(bounds::Type{Union{}}, _, _, _, ::False) = bounds, []
 
 normalized_typevar_by_position(position::Int) = Parsers.TypeRange_Parsed(Union{}, Symbol("T", position), Any)
 normalized_typevar_by_position(position::Int, ub) = Parsers.TypeRange_Parsed(Union{}, Symbol("T", position), ub)

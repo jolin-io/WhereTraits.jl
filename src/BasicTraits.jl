@@ -1,28 +1,51 @@
 module BasicTraits
-export ismutable, isimmutable, isiterable, iscallable,
+export @overwrite_Base, ismutable, isimmutable, isiterable, iscallable,
   isbitstype, isconcretetype
 
+macro overwrite_Base()
+  esc(quote
+    using Traits.BasicTraits
+    const isimmutable = Traits.BasicTraits.isimmutable
+    const isbitstype = Traits.BasicTraits.isbitstype
+    const isconcretetype = Traits.BasicTraits.isconcretetype
+    nothing  # empty return
+  end)
+end
 # mimicking typeclasses from SimpleTraits.BaseTraits
 
 ismutable(T::DataType) = T.mutable
 ismutable(::Type) = false
-ismutable(value) = !Base.isimmutable(value)
-Base.isimmutable(T::Type) = !ismutable(T)
+ismutable(value) = ismutable(typeof(value))
 
-const isiterable = Base.isiterable
+# isimmutable is already part of Base export, hence we better use it,
+# however it says "Note that this function works on values"
+# i.e. we could overwrite the Base.isimmutable for Type, however this is Type piracy and potentially dangerous
+# hence we define our own isimmutable
+isimmutable(any) = !ismutable(any)
 
-# if we would like to test whether the type itself is callable, we would use ``iscallable(f) = !isempty(methods(f))``
-# https://stackoverflow.com/questions/41658692/how-to-determine-if-julia-object-is-callable
-# but Types are always callable, so this makes no sense here
-function iscallable(T)
-  if isdefined(T, :name) && isdefined(T.name, :mt)
-    !isempty(T.name.mt)
-  else
-    false
-  end
+isiterable(T::Type) = Base.isiterable(T)
+isiterable(any) = isiterable(typeof(any))
+
+
+"""
+this checks whether there are functions defined on a given TYPE
+
+i.e. use it like ``iscallable(typeof(+))``
+
+for convenience ``iscallable(value) = iscallable(typeof(value))``
+"""
+function iscallable(T::Type)
+  lim = -1
+  world = typemax(UInt)
+  methods = Base._methods_by_ftype(Tuple{T, Vararg}, lim, world)
+  !isempty(methods)
 end
+iscallable(value) = iscallable(typeof(value))
 
-const isbitstype = Base.isbitstype
-const isconcretetype = Base.isconcretetype
+isbitstype(T::Type) = Base.isbitstype(T)
+isbitstype(value) = isbitstype(typeof(value))
+
+isconcretetype(T::Type) = Base.isconcretetype(T)
+isconcretetype(value) = isconcretetype(typeof(value))
 
 end  # module

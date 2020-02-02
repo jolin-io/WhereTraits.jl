@@ -4,6 +4,20 @@ use this package by loading
 using Traits
 ```
 
+Out and isdef
+-------------
+
+```julia
+using Traits
+Out(Base.map, typeof(string), Vector{Int})  # Vector{String}
+```
+
+If you don't have a concrete function at hand, you can use the package ``FunctionWrappers`` which comes with a highlevel Function type you can use as follows:
+```julia
+using Traits
+import FunctionWrappers: FunctionWrapper
+Out(Base.map, FunctionWrapper{Bool, Tuple{Any}}, Vector{Int})  # Vector{Bool}
+```
 
 
 Performance + Comparison with [mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)

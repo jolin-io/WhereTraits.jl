@@ -11,6 +11,9 @@ struct TypeDict{T}
     vector = reverse(unique(x -> x[1], reverse(args)))
     new{T}(vector)
   end
+  function TypeDict{T}(::Val{:raw}, vector::Vector{Tuple{Type, T}}) where T
+    new{T}(vector)
+  end
 end
 function TypeDict(args::Vector{Tuple{Type, T}}) where T
   TypeDict{T}(args)
@@ -18,6 +21,9 @@ end
 function TypeDict(args::Vararg{Pair{<:Type, T}}) where T
   vector = Tuple{Type, T}[(a.first, a.second) for a in args]
   TypeDict(vector)
+end
+function Base.copy(td::TypeDict{T}) where T
+  TypeDict{T}(Val{:raw}(), copy(td._list))
 end
 
 Base.iterate(d::TypeDict, state...) = Base.iterate(d._list, state...)

@@ -1,5 +1,5 @@
 module Syntax
-export @traits, @traits_test, @traits_show_implementation, @traits_delete!
+export @traits, @traits_test, @traits_show_implementation
 
 using DataTypesBasic
 using ASTParser
@@ -11,25 +11,18 @@ include("Lowering.jl")
 using .Lowering
 include("NormalizeType.jl")
 using .NormalizeType
+include("Utils.jl")
+using .Utils
 using Suppressor
 using ProxyInterface
-
-# flatten out blocks
-flatten_blocks(expr::Expr) = flatten_blocks(Val{expr.head}(), expr.args)
-flatten_blocks(any) = any
-flatten_blocks(::Val{head}, args) where head = Expr(head, flatten_blocks.(args)...)
-function flatten_blocks(head::Val{:block}, args)
-  args′ = flatten_blocks.(args)
-  args′′ = [((a isa Expr && a.head == :block) ? a.args : [a] for a in args′)...;]
-  Expr(:block, args′′...)
-end
+using Markdown
 
 """
 @traits f(a, b) where {!isempty(a), !isempty(b)} = (a[1], b[1])
 """
-macro traits(expr)
-  expr′ = macroexpand(__module__, expr)
-  expr_traits = _traits(__module__, expr′)
+macro traits(expr_original)
+  expr = macroexpand(__module__, expr_original)
+  expr_traits = _traits(@MacroEnv, expr, expr_original)
   expr_traits = esc(expr_traits)
   if CONFIG.suppress_on_traits_definitions
     expr_traits = :(@suppress $expr_traits)
@@ -43,9 +36,9 @@ like @traits, and works within Test.@testset, but cannot be doc-stringed
 
 needed because of https://github.com/JuliaLang/julia/issues/34263
 """
-macro traits_test(expr)
-  expr′ = macroexpand(__module__, expr)
-  expr_traits = _traits(__module__, expr′)
+macro traits_test(expr_original)
+  expr = macroexpand(__module__, expr_original)
+  expr_traits = _traits(@MacroEnv, expr, expr_original)
   # :(eval($(QuoteNode(...))) is a workaround for @testset, see https://github.com/JuliaLang/julia/issues/34263
   expr_traits = :(eval($(QuoteNode(expr_traits))))
   expr_traits = esc(expr_traits)
@@ -56,32 +49,36 @@ macro traits_test(expr)
 end
 
 
-function _traits(mod, expr::Expr)
+function _traits(env, expr::Expr, expr_original::Expr)
   parser = Matchers.AnyOf(Parsers.Function(), anything)
-  _traits_parsed(mod, parser(expr))
+  _traits_parsed(env, parser(expr), expr_original)
 end
 
-function _traits_parsed(mod, func_parsed::Parsers.Function_Parsed)
-  mod_traitsdef, store = getorcreatestore!(mod, func_parsed.name)
+function _traits_parsed(env, func_parsed::Parsers.Function_Parsed, expr_original::Expr)
+  mod_traitsdef, store::TraitsStore = getorcreatestore!(env.mod, func_parsed.name)
+  func_parsed_original = Parsers.Function()(expr_original)
 
   basefunc, lowerings = lower_args_default(func_parsed)
-  basefunc_outer, basefunc_inner = TraitsFunctionParsed(mod, basefunc)
-  basefunc_new = merge!(store, basefunc_outer, basefunc_inner)
+  basefunc_ori, lowerings_ori = lower_args_default(func_parsed_original)
+  basefunc_outer, basefunc_inner = TraitsFunctionParsed(env, basefunc, toAST(basefunc_ori))
+  store, base_update, base_torender = merge(store, basefunc_outer, basefunc_inner)
+  exprs = Any[
+    render_store_reference(env, store),
+    render(env, store, base_torender),
+    render_doc(env, store, base_update)]
 
-  exprs = Expr[render_store_reference(mod, store), render(mod, store, basefunc_new)]
-
-  for f in lowerings
+  for (f, f_ori) in zip(lowerings, lowerings_ori)
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
-    lowered_outer, lowered_inner = TraitsFunctionParsed(mod, f, on_traits_dropped = msg -> nothing)
-    lowered_new = merge!(store, lowered_outer, lowered_inner)
-    push!(exprs, render(mod, store, lowered_new))
+    lowered_outer, lowered_inner = TraitsFunctionParsed(env, f, toAST(f_ori), on_traits_dropped = msg -> nothing)
+    store, lowered_update, lowered_torender = merge(store, lowered_outer, lowered_inner)
+    push!(exprs, render(env, store, lowered_torender))
   end
   # finally return nothing in order to not return implementation detail
   flatten_blocks(Expr(:block, exprs..., nothing))
 end
 
 
-function _traits_parsed(mod, parsed)
+function _traits_parsed(env, parsed)
   throw(ArgumentError("@traits macro expects function expression"))
 end
 
@@ -100,44 +97,14 @@ end
 
 # to get an easy fealing of what is going on and inspect errors
 macro traits_show_implementation(funcname)
-  QuoteNode(traits_show_implementation(__module__, funcname))
+  QuoteNode(traits_show_implementation(@MacroEnv, funcname))
 end
 
-function traits_show_implementation(mod, funcname)
-  mod_traitsdef, store = getorcreatestore!(mod, funcname)
-  render(mod, store)
+function traits_show_implementation(env, funcname)
+  mod_traitsdef, store = getorcreatestore!(env.mod, funcname)
+  render(env, store)
 end
 
-function _true_mod_and_funcname(mod, funcname)
-  parser = Matchers.AnyOf(Parsers.Symbol(), Parsers.NestedDot())
-  @match(parser(funcname)) do f
-    f(::Parsers.Symbol_Parsed) = mod, funcname
-    function f(x::Parsers.NestedDot_Parsed)
-      mod = getproperty(mod, x.base)
-      for property in x.properties[1:end-1]
-        mod = getproperty(mod, property)
-      end
-      mod, x.properties[end]
-    end
-  end
-end
-
-"""
-  if you need to reset the traits definition of a certain function
-
-Needed if you had a wrong reference in the traits functions
-  which will always throw errors
-
-CAUTION: this DOES NOT delete plain function definitions, but only the extra traits information
-"""
-macro traits_delete!(funcname)
-  traits_delete!(__module__, funcname)
-  QuoteNode(nothing)
-end
-function traits_delete!(mod, funcname)
-  key = unique_funcname(mod, funcname)
-  delete!(traits_store, key)
-end
 
 # Internal State of the syntax
 # ============================
@@ -145,9 +112,10 @@ end
 # this syntax is so complex that we need to store a state for each function
 
 const InnerFunc = Any
-const InnerFuncs = Dict{Any, Any}
+const InnerFuncs = Dict{Any, Any}  # Dict{FixedPart, NonFixedPart}
 const OuterFunc = Any
-const SignatureDict = TypeDict{Tuple{OuterFunc, InnerFuncs}}
+const DescriptionOfOneTraitsFunction = Tuple{OuterFunc, InnerFuncs}
+const SignatureDict = TypeDict{DescriptionOfOneTraitsFunction}
 struct Reference
   mod::Module
   isoriginalmodule::Bool
@@ -163,41 +131,23 @@ struct TraitsStore
   global_innerfunction_reference::Reference
   # maps a type signature to the respective outerfunction with possible several innerfunction-definitions
   definitions::SignatureDict
-  TraitsStore(global_innerfunction_reference::Reference) = new(global_innerfunction_reference, SignatureDict())
 end
+TraitsStore(global_innerfunction_reference::Reference) = TraitsStore(global_innerfunction_reference, SignatureDict())
 ProxyInterface.dict(store::TraitsStore) = store.definitions
 ProxyInterface.dict(Store::Type{TraitsStore}) = SignatureDict
 ProxyInterface.@dict_mutable TraitsStore
+function Base.copy(store::TraitsStore)
+  TraitsStore(store.global_innerfunction_reference, copy(store.definitions))
+end
 
 # here the reference to the internal state for the @traits macro is stored for each functionname respectively
 # if the function has no key, then it is defined in the original module
 const traits_store = Dict{Symbol, Reference}()
 
-function unique_inner_function_name(mod, funcname)
-  key = unique_funcname(mod, funcname)
-  Symbol("'", "__traits__.", key, "'")
-end
-function unique_funcname(mod, funcname)
-  mod′, funcname′ = normalize_mod_and_name(mod, funcname)
-  Symbol(mod′, :., funcname′)
-end
-function normalize_mod_and_name(mod, name)
-  parser = Matchers.AnyOf(Parsers.Symbol(), Parsers.NestedDot())
-  normalize_mod_and_name(mod, parser(name))
-end
-normalize_mod_and_name(mod, name::Parsers.Symbol_Parsed) = mod, name.symbol
-function normalize_mod_and_name(mod, name::Parsers.NestedDot_Parsed)
-  mod′::Module = getproperty(mod, name.base)
-  for field in name.properties[1:end-1]
-    mod′ = getproperty(mod′, field)
-  end
-  mod′, name.properties[end]  # NestedDot.properties is known to be non-empty
-end
-
 function getorcreatestore!(mod, funcname)
   mod_original, _ = normalize_mod_and_name(mod, funcname)
   inner_function_name = unique_inner_function_name(mod, funcname)
-  if hasproperty(mod_original, inner_function_name)
+  if isdefined(mod_original, inner_function_name)
     # call with no args to get the store
     mod_original, getproperty(mod_original, inner_function_name)()
   elseif haskey(traits_store, inner_function_name)
@@ -211,44 +161,77 @@ function getorcreatestore!(mod, funcname)
     ref = Reference(mod, isoriginalmodule, inner_function_name)
     if !isoriginalmodule
       # if we are not in the original module we need to store the reference for others to find the traits definitions
+      # we are going to safe the TraitsStore on the function ``ref`` with 0 arguments
       traits_store[inner_function_name] = ref
     end
     mod, TraitsStore(ref)
   end
 end
 
-function merge!(store, outerfunc, innerfunc)
+abstract type RenderType end
+struct RenderOuterFunc{O} <: RenderType
+  outer::O
+end
+struct RenderOuterAndInnerFuncs{O, Is} <: RenderType
+  outer::O
+  inners::Is
+end
+struct RenderInnerFunc{O, I} <: RenderType
+  # we need the outerfunc to construct the innerfunc, as it depends on the ordering of the traits functions
+  # which are defined in the outerfunc
+  outer::O
+  inner::I
+end
+
+struct TraitsUpdate{O, Is, I}
+  outer::O
+  inners::Is
+  inner::I
+end
+
+
+"""
+merge the new traits information into the given traitsstore
+and return whatever needs to be rendered for a correct update of the traits
+"""
+function Base.merge(store::TraitsStore, outerfunc, innerfunc)
   signature = outerfunc.fixed.signature
-  if haskey(store, signature)
+  # update TraitsStore and return what to render
+  store_new = copy(store)
+  torender = if haskey(store, signature)
     outerfunc_old, innerfuncs = store[signature]
-    innerfuncs[innerfunc.fixed] = innerfunc.nonfixed
+
+    innerfuncs_new = copy(innerfuncs)
+    innerfuncs_new[innerfunc.fixed] = innerfunc.nonfixed
 
     outerfunc_new_nonfixed = (
       # we aggregate all unique traits and ensure order
       innerargs_traits = sortexpr(unique([outerfunc_old.nonfixed.innerargs_traits; outerfunc.nonfixed.innerargs_traits])),
     )
 
-    if  outerfunc_old.nonfixed == outerfunc_new_nonfixed
-      # only the new innerfunc is new
-      # still we need outerfunc' for the information which traits are currently used in total
-      outerfunc_old, innerfunc
+    if outerfunc_old.nonfixed == outerfunc_new_nonfixed  # if same Traits, only the inner function needs to be rendered
+      store_new[signature] = (outerfunc_old, innerfuncs_new)
+      RenderInnerFunc(outerfunc_old, innerfunc)
     else
       outerfunc_new = (
         # outerfunc.fixed == outerfunc_old.fixed, because of same signature
         fixed = outerfunc_old.fixed,
         nonfixed = outerfunc_new_nonfixed,
       )
-      update = (outerfunc_new, innerfuncs)
-      store[signature] = update
-      update
+      store_new[signature] = (outerfunc_new, innerfuncs_new)
+      RenderOuterAndInnerFuncs(outerfunc_new, innerfuncs_new)
     end
   else
-    innerfuncs = InnerFuncs()
-    innerfuncs[innerfunc.fixed] = innerfunc.nonfixed
-    initial = (outerfunc, innerfuncs)
-    store[signature] = initial
-    initial
+    # initial case
+    innerfuncs_new = InnerFuncs()
+    innerfuncs_new[innerfunc.fixed] = innerfunc.nonfixed
+    store_new[signature] = (outerfunc, innerfuncs_new)
+    RenderOuterAndInnerFuncs(outerfunc, innerfuncs_new)
   end
+  # also return all the information about the state after this merge within an update variable
+  (outerfunc, innerfuncs) = store_new[signature]
+  update = TraitsUpdate(outerfunc, innerfuncs, innerfunc)
+  store_new, update, torender
 end
 
 
@@ -259,9 +242,9 @@ end
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
 
-function render_store_reference(mod::Module, store::TraitsStore)
+function render_store_reference(env::MacroEnv, store::TraitsStore)
   name = store.global_innerfunction_reference
-  if mod === name.mod
+  if env.mod === name.mod
     # if we are rendering code for the same module, we need to drop the module information
     # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
     # for the initial definition
@@ -272,35 +255,35 @@ function render_store_reference(mod::Module, store::TraitsStore)
   end)
 end
 
-# render needs the module where it should render, because the syntax ``MyModule.B(args) = ...`` does only work for
-# method overloading (where it is the only syntax), but not for DEFINING the same function initially. (For that you
-# need to be within MyModule and execute ``B(args) = ...``)
-function render(mod::Module, store::TraitsStore)
+"""
+render a whole TraitsStore
+
+for debugging purposes only
+"""
+function render(env::MacroEnv, store::TraitsStore)
   exprs = []
   for (outerfunc, innerfuncs) in values(store)
-    push!(exprs, render(mod, store, outerfunc))
+    push!(exprs, render(env, store, RenderOuterFunc(outerfunc)))
     for (fixed, nonfixed) in innerfuncs
       innerfunc = (fixed = fixed, nonfixed = nonfixed)
-      push!(exprs, render(mod, store, outerfunc, innerfunc))
+      push!(exprs, render(env, store, RenderInnerFunc(outerfunc, innerfunc)))
     end
   end
   flatten_blocks(Expr(:block, exprs...))
 end
 
-function render(mod::Module, store::TraitsStore, outerfunc_innerfuncs::Tuple{OuterFunc, InnerFuncs})
-  outerfunc, innerfuncs = outerfunc_innerfuncs
+"""
+rerender one single outerfunc and respective innerfuncs
+"""
+function render(env::MacroEnv, store::TraitsStore, torender::RenderOuterAndInnerFuncs)
+  outerfunc, innerfuncs = torender.outer, torender.inners
   exprs = []
-  push!(exprs, render(mod, store, outerfunc))
+  push!(exprs, render(env, store, RenderOuterFunc(outerfunc)))
   for (fixed, nonfixed) in innerfuncs
     innerfunc = (fixed = fixed, nonfixed = nonfixed)
-    push!(exprs, render(mod, store, outerfunc, innerfunc))
+    push!(exprs, render(env, store, RenderInnerFunc(outerfunc, innerfunc)))
   end
   flatten_blocks(Expr(:block, exprs...))
-end
-
-function render(mod::Module, store::TraitsStore, outerfunc_innerfunc::Tuple{OuterFunc, InnerFunc})
-  outerfunc, innerfunc = outerfunc_innerfunc
-  render(mod, store, outerfunc, innerfunc)
 end
 
 function _map_args(new_to_old, innerargs)
@@ -315,7 +298,8 @@ end
 render innerfunction
 (this is only possible with informations from outerfunc)
 """
-function render(mod::Module, store::TraitsStore, outerfunc, innerfunc)
+function render(env::MacroEnv, store::TraitsStore, torender::RenderInnerFunc)
+  outerfunc, innerfunc = torender.outer, torender.inner
   args = [
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
@@ -326,11 +310,11 @@ function render(mod::Module, store::TraitsStore, outerfunc, innerfunc)
     :(::$_BetweenTypeVarsAndTraits);
     _map_args(innerfunc.fixed.traits_mapping, outerfunc.nonfixed.innerargs_traits);
   ]
+  # if we are rendering code for the same module, we need to drop the module information
+  # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+  # for the initial definition
   name = store.global_innerfunction_reference
-  if mod === name.mod
-    # if we are rendering code for the same module, we need to drop the module information
-    # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
-    # for the initial definition
+  if env.mod === name.mod
     name = name.name
   end
 
@@ -345,7 +329,12 @@ function render(mod::Module, store::TraitsStore, outerfunc, innerfunc)
   toAST(innerfunc_parsed)
 end
 
-function render(mod::Module, store::TraitsStore, outerfunc)
+"""
+render outer function
+"""
+function render(env::MacroEnv, store::TraitsStore, torender::RenderOuterFunc)
+  outerfunc = torender.outer
+
   innerargs = [
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
@@ -362,6 +351,8 @@ function render(mod::Module, store::TraitsStore, outerfunc)
     args = innerargs,
     kwargs = [:(kwargs...)],
   )
+  # add LineNumberNode for debugging purposes
+  body = Expr(:block, env.source, innerfunc_call)
 
   outerfunc_parsed = Parsers.Function_Parsed(
     name = outerfunc.fixed.name,
@@ -369,19 +360,91 @@ function render(mod::Module, store::TraitsStore, outerfunc)
     args = outerfunc.fixed.args,
     kwargs = [:(kwargs...)],
     wheres = outerfunc.fixed.wheres,
-    body = innerfunc_call
+    body = body,
   )
-  # the outer function should become documented
-  :(Base.@__doc__ $(toAST(outerfunc_parsed)))
+  toAST(outerfunc_parsed)
+end
+
+"""
+render documentation
+
+extra effort needs to be done to properly document the outer function by referring
+to innerfunctions
+"""
+function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
+  outerfunc = torender.outer
+  innerfuncs = torender.inners
+  innerfunc = torender.inner
+
+  signature = toAST(Parsers.Signature_Parsed(
+    name = outerfunc.fixed.name,
+    curlies = outerfunc.fixed.curlies,
+    args = outerfunc.fixed.args,
+    kwargs = [:(kwargs...)],
+    wheres = outerfunc.fixed.wheres,
+  ))
+
+  # start documentation with autosignature of outer function
+  header = Markdown.parse("""
+  ```
+  $signature
+  ```
+  ------ Original @traits definitions follow ------
+
+  """)
+  separator = Markdown.parse("- - - - - - - - - - - -\n")
+
+  doc_exprs = Any[header]
+  for (fixed, nonfixed) in innerfuncs
+    # automatic signature string of inner function
+    signature_original = Markdown.parse("```julia\n$(nonfixed.expr_original.args[1])\n```")  # TODO this assumes that expr_original is a function, can we do this?
+    push!(doc_exprs, signature_original)
+    # manual doc string of respective inner function
+    push!(doc_exprs, :(Base.Docs.doc(
+      $(toAST(store.global_innerfunction_reference)),
+      Tuple{Type{$(outerfunc.fixed.signature)}, $(innerfunc_fixed_to_doctype(fixed))})))
+    # automatic doc string of inner function definition
+    expr_original = Markdown.parse("Original @traits definition:\n```julia\n$(nonfixed.expr_original)\n```")
+    push!(doc_exprs, expr_original)
+    # better visual separation
+    push!(doc_exprs, separator)
+  end
+  # get rid of last separator
+  deleteat!(doc_exprs, lastindex(doc_exprs))
+
+  # if we are rendering code for the same module, we need to drop the module information
+  # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+  # for the initial definition
+  name = store.global_innerfunction_reference
+  if env.mod === name.mod
+    name = name.name
+  end
+
+  quote
+    # first the documentation of the inner function as this needs to be updated BEFORE the outer doc-string
+    # is updated below
+    Base.@__doc__ function $name(::Type{$(outerfunc.fixed.signature)}, ::$(innerfunc_fixed_to_doctype(innerfunc.fixed))) end
+
+    # documentation of outer function (we need to manually ignore nothing docs)
+    let docstring = Base.Docs.catdoc(filter(!isnothing, [$(doc_exprs...)])...)
+      Traits.Utils.DocsHelper.@doc_signature docstring ($signature)
+    end
+  end
 end
 
 
+struct InnerFuncFixedDocSig{Args, TypeVars, Traits} end
+function innerfunc_fixed_to_doctype(innerfunc_fixed)
+  dicts = [innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping, innerfunc_fixed.traits_mapping]
+  types = Dict_to_normalizedType.(dicts)
+  InnerFuncFixedDocSig{types...}
+end
 
 # Syntax Parser
 # =============
 
-TraitsFunctionParsed(mod, expr::Expr; kwargs...) = TraitsFunctionParsed(mod, Parsers.Function()(expr); kwargs...)
-function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed; on_traits_dropped = msg -> throw(ArgumentError(msg)))
+TraitsFunctionParsed(env, expr::Expr, expr_original; kwargs...) = TraitsFunctionParsed(env, Parsers.Function()(expr), expr_original; kwargs...)
+function TraitsFunctionParsed(env, func_parsed::Parsers.Function_Parsed, expr_original; on_traits_dropped = msg -> throw(ArgumentError(msg)))
   # Parse main syntax
   # =================
   args_names = [Parsers.Arg()(arg).name for arg in func_parsed.args]
@@ -475,7 +538,7 @@ function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed; on_trai
     body = :nothing
   )
 
-  outerfunc_fixed, innerfunc_fixed = normalize_func(mod, outerfunc_parsed)
+  outerfunc_fixed, innerfunc_fixed = normalize_func(env.mod, outerfunc_parsed)
 
   @assert(
     isempty(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))),
@@ -517,6 +580,7 @@ function TraitsFunctionParsed(mod, func_parsed::Parsers.Function_Parsed; on_trai
     nonfixed = (
       kwargs = func_parsed.kwargs,
       body = func_parsed.body,
+      expr_original = expr_original,
     ),
   )
   outerfunc′, innerfunc′
@@ -524,6 +588,7 @@ end
 
 _change_symbols(vec::Vector, symbol_mapping) = [_change_symbols(x, symbol_mapping) for x in vec]
 _change_symbols(sym::Symbol, symbol_mapping) = get(symbol_mapping, sym, sym)
+_change_symbols(any, symbol_mapping) = any
 _change_symbols(qn::QuoteNode, symbol_mapping) = QuoteNode(_change_symbols(qn.value, symbol_mapping))
 _change_symbols(expr::Expr, symbol_mapping) = Expr(expr.head, _change_symbols(expr.args, symbol_mapping)...)
 

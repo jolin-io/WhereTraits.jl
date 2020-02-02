@@ -1,12 +1,14 @@
 module Traits
-export @traits, @traits_test, @traits_show_implementation, @traits_delete!,
+export @traits, @traits_test, @traits_show_implementation,
   isdef, Out, NotApplicable
 
 @Base.kwdef mutable struct _Config
   # set to false because ``@suppress`` does currently not work with function definitions
   # for updates see https://github.com/JuliaIO/Suppressor.jl/issues/29
   suppress_on_traits_definitions::Bool = false
+  auto_documentation::Bool = true
 end
+# TODO documentation of struct fields does not seem to work - hence we document the constant instead
 """
 suppress_on_traits_definitions::Bool = false
 

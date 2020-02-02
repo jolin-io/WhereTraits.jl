@@ -1,4 +1,4 @@
-using Traits.BasicTraits
+Traits.BasicTraits.@overwrite_Base
 using Test
 
 # we only test for subset relationship because traits might be added during this test run

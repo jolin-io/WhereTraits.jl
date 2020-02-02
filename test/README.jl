@@ -47,13 +47,14 @@ end
 
 @code_llvm fn(Float32(5))
 
-function find_definition(out)
-  s = findfirst("Function", out)
-  out[s.start: end]
-end
+# julia 1.2?
+# function find_definition(out)
+#   s = findfirst("Function", out)
+#   out[s.start: end]
+# end
 
 # string distance should be small
-@test evaluate(Levenshtein(), find_definition(out1), find_definition(out2)) <= 10
+@test evaluate(Levenshtein(), out1, out2) <= 10
 # println(out1)
 # println(out2)
 @code_warntype fn(5)

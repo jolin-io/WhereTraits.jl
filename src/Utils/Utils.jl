@@ -1,7 +1,8 @@
 module Utils
 export iftrue, next!, filtersplit, depends_on,
   TypeDict,
-  SortExpr, sortexpr
+  SortExpr, sortexpr,
+  @doc_signature
 
 next!(iter::Base.Iterators.Stateful) = iterate(iter)[1]
 
@@ -22,5 +23,7 @@ depends_on(any, symbols) = false
 
 include("TypeDict.jl")
 include("SortExpr.jl")
+include("DocsHelper.jl")
+using .DocsHelper
 
 end  # module
