@@ -400,9 +400,9 @@ function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
     signature_original = Markdown.parse("```julia\n$(nonfixed.expr_original.args[1])\n```")  # TODO this assumes that expr_original is a function, can we do this?
     push!(doc_exprs, signature_original)
     # manual doc string of respective inner function
-    push!(doc_exprs, :(Base.Docs.doc(
+    push!(doc_exprs, :(Traits.Utils.DocsHelper.mygetdoc(
       $(toAST(store.global_innerfunction_reference)),
-      Tuple{Type{$(outerfunc.fixed.signature)}, $(innerfunc_fixed_to_doctype(fixed))})))
+      Tuple{Type{$(outerfunc.fixed.signature)}, Type{$(innerfunc_fixed_to_doctype(fixed))}})))
     # automatic doc string of inner function definition
     expr_original = Markdown.parse("Original @traits definition:\n```julia\n$(nonfixed.expr_original)\n```")
     push!(doc_exprs, expr_original)
@@ -419,11 +419,12 @@ function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
   if env.mod === name.mod
     name = name.name
   end
+  name = toAST(name)
 
   quote
     # first the documentation of the inner function as this needs to be updated BEFORE the outer doc-string
     # is updated below
-    Base.@__doc__ function $name(::Type{$(outerfunc.fixed.signature)}, ::$(innerfunc_fixed_to_doctype(innerfunc.fixed))) end
+    Base.@__doc__ function $name(::Type{$(outerfunc.fixed.signature)}, ::Type{$(innerfunc_fixed_to_doctype(innerfunc.fixed))}) end
 
     # documentation of outer function (we need to manually ignore nothing docs)
     let docstring = Base.Docs.catdoc(filter(!isnothing, [$(doc_exprs...)])...)

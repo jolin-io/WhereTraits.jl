@@ -2,7 +2,7 @@ module Utils
 export iftrue, next!, filtersplit, depends_on,
   TypeDict,
   SortExpr, sortexpr,
-  @doc_signature
+  @doc_signature, isnodocumentationfound
 
 next!(iter::Base.Iterators.Stateful) = iterate(iter)[1]
 
