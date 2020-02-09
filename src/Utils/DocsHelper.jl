@@ -20,13 +20,13 @@ end
 Like Docs.doc but returns nothing if no information is found
 """
 function mygetdoc(binding::Base.Docs.Binding, sig::Type = Union{})
-    if defined(binding)
+    if Base.Docs.defined(binding)
         result = Base.Docs.getdoc(Base.Docs.resolve(binding), sig)
         result === nothing || return result
     end
-    results, groups = DocStr[], MultiDoc[]
+    results, groups = Base.Docs.DocStr[], Base.Docs.MultiDoc[]
     # Lookup `binding` and `sig` for matches in all modules of the docsystem.
-    for mod in modules
+    for mod in Base.Docs.modules
         dict = Base.Docs.meta(mod)
         if haskey(dict, binding)
             multidoc = dict[binding]
