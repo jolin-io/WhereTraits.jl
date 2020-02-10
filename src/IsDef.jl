@@ -62,7 +62,6 @@ _Out(f, types, outtype) = outtype
 
 # without ``@generated`` the function does not type-infere in detail
 @generated function newtype_signature(::Type{T}) where T <: Tuple
-  println("generated: T = $T")
   Tuple{_newtype.(T.parameters)...}
 end
 
@@ -77,7 +76,6 @@ end
 
 # we need a small intermediate function to conveniently work with UnionAll types
 function _newtype(T)
-  println("_newtype: T = $T")
   newtype(T)
 end
 function _newtype(T::UnionAll)
