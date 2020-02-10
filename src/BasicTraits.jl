@@ -34,7 +34,8 @@ i.e. use it like ``iscallable(typeof(+))``
 
 for convenience ``iscallable(value) = iscallable(typeof(value))``
 """
-function iscallable(T::Type)
+@generated function iscallable(::Type{T}) where T
+  # without ``@generated`` it fails to type infer properly
   lim = -1
   world = typemax(UInt)
   methods = Base._methods_by_ftype(Tuple{T, Vararg}, lim, world)
@@ -47,5 +48,6 @@ isbitstype(value) = isbitstype(typeof(value))
 
 isconcretetype(T::Type) = Base.isconcretetype(T)
 isconcretetype(value) = isconcretetype(typeof(value))
+
 
 end  # module

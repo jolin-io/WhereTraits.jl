@@ -95,17 +95,6 @@ end
 #   render(store)
 # end
 
-# to get an easy fealing of what is going on and inspect errors
-macro traits_show_implementation(funcname)
-  QuoteNode(traits_show_implementation(@MacroEnv, funcname))
-end
-
-function traits_show_implementation(env, funcname)
-  mod_traitsdef, store = getorcreatestore!(env.mod, funcname)
-  render(env, store)
-end
-
-
 # Internal State of the syntax
 # ============================
 
@@ -139,6 +128,52 @@ ProxyInterface.@dict_mutable TraitsStore
 function Base.copy(store::TraitsStore)
   TraitsStore(store.global_innerfunction_reference, copy(store.definitions))
 end
+
+
+# to get an easy fealing of what is going on and inspect errors
+macro traits_show_implementation(funcname)
+  traits_show_implementation(@MacroEnv, funcname)
+end
+
+function traits_show_implementation(env, funcname)
+  mod_traitsdef, store = getorcreatestore!(env.mod, funcname)
+  traits_show_implementation(env, store)
+end
+
+"""
+render a whole TraitsStore
+
+for debugging purposes only
+"""
+function traits_show_implementation(env::MacroEnv, store::TraitsStore)
+  exprs = []
+  for (outerfunc, innerfuncs) in values(store)
+    push!(exprs, Markdown.parse("Outer function for signature $(outerfunc.fixed.signature)"))
+    push!(exprs, Markdown.parse("""
+    ```
+    $(render(env, store, RenderOuterFunc(outerfunc))))
+    ```
+    """))
+    push!(exprs, Markdown.parse("\n- - -\n"))
+    push!(exprs, Markdown.parse("Inner functions for signature $(outerfunc.fixed.signature)"))
+    for (fixed, nonfixed) in innerfuncs
+      innerfunc = (fixed = fixed, nonfixed = nonfixed)
+      push!(exprs, Markdown.parse("""
+      ```
+      $(render(env, store, RenderInnerFunc(outerfunc, innerfunc)))
+      ```
+      """))
+      push!(exprs, Markdown.parse("\n- - -\n"))
+    end
+    # nice separtor between several outer functions
+    push!(exprs, Markdown.HorizontalRule())
+  end
+  Markdown.MD(exprs...)
+end
+
+
+# implementation
+# ##############
 
 # here the reference to the internal state for the @traits macro is stored for each functionname respectively
 # if the function has no key, then it is defined in the original module
@@ -392,7 +427,7 @@ function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
   ------ Original @traits definitions follow ------
 
   """)
-  separator = Markdown.parse("- - - - - - - - - - - -\n")
+  separator = Markdown.parse("- - -\n")
 
   doc_exprs = Any[header]
   for (fixed, nonfixed) in innerfuncs

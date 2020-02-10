@@ -60,18 +60,31 @@ Out(f, args...) = Out(f, Tuple{typeof.(args)...})
 _Out(f, types, outtype::Type{Union{}}) = NotApplicable
 _Out(f, types, outtype) = outtype
 
-
+# without ``@generated`` the function does not type-infere in detail
 @generated function newtype_signature(::Type{T}) where T <: Tuple
+  println("generated: T = $T")
   Tuple{_newtype.(T.parameters)...}
 end
 
+# to correctly infer UnionAll types, we need to construct new UnionAll types with unseen typevariables
+# for this we create a complete new type and give it the abbreviation "empty set"
+struct NewType end
+∅ = NewType()
+function Base.show(io::IO, exc::NewType)
+  print(io, "∅")
+end
+
+
 # we need a small intermediate function to conveniently work with UnionAll types
-_newtype(T) = newtype(T)
+function _newtype(T)
+  println("_newtype: T = $T")
+  newtype(T)
+end
 function _newtype(T::UnionAll)
   # get generic newtype based on standardized UnionAll type
   S = newtype(Base.unwrap_unionall(T).name.wrapper)
-  # union types are mapped to union of respective newtypes
-  rewrap_unionall(S, T)
+  # already concrete unionall typevars are reused and all other typevars are made concrete
+  rewrap_unionall_make_concrete(S, T)
 end
 
 function newtype(T::Type)
@@ -89,6 +102,11 @@ end
 function newtype(T::Union)
   # union types are mapped to union of respective newtypes
   Union{newtype(t.a), newtype(t.b)}
+end
+# if someone dispatches on Type{SomeType}
+# this is already singleton like dispatch and we don't need to construct new types
+function newtype(T::Type{Type{S}}) where S
+  T
 end
 
 macro create_newtype(typename)
@@ -141,12 +159,16 @@ function create_newtype(__module__, typenames::Union{Vector, Tuple})
   expr
 end
 
+# Helpers
+# -------
+
 function split_where(T::UnionAll)
   base, typevars = split_where(T.body)
   base, [T.var; typevars...]
 end
 split_where(T) = T, []
 
+# TODO currently not needed, but nice function
 function rewrap_unionall(newtype, target)
   # we want to handle also fixed typevars, hence we use parameters
   target_base, target_typevars = split_where(target)
@@ -157,6 +179,15 @@ function rewrap_unionall(newtype, target)
     newtype = UnionAll(typevar, newtype)
   end
   newtype
+end
+
+function rewrap_unionall_make_concrete(newtype, target)
+  # we want to handle also fixed typevars, hence we use parameters
+  target_base = Base.unwrap_unionall(target)
+  target_typeargs = target_base.parameters
+  # replace all non-concrete typevars with the NewType ∅
+  allconcrete_typeargs = [tv isa TypeVar ? ∅ : tv for tv in target_typeargs]
+  newtype{allconcrete_typeargs...}
 end
 
 supertypes(::Type{Any}) = [Any]
@@ -173,6 +204,7 @@ supertypes(T::Type) = [T; supertypes(supertype(T))]
 @create_newtype DenseArray AbstractArray AbstractVector AbstractMatrix Base.AbstractZeroDimArray
 @create_newtype AbstractUnitRange OrdinalRange AbstractRange
 @create_newtype AbstractSet
+@create_newtype Function
 @create_newtype(
   Base.AbstractCartesianIndex, Base.AbstractChannel, Base.AbstractCmd,
   Base.AbstractDisplay, Base.AbstractIrrational, Base.AbstractLock,
