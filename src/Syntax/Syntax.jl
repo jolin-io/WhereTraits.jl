@@ -64,8 +64,10 @@ function _traits_parsed(env, func_parsed::Parsers.Function_Parsed, expr_original
   store, base_update, base_torender = merge(store, basefunc_outer, basefunc_inner)
   exprs = Any[
     render_store_reference(env, store),
-    render(env, store, base_torender),
-    render_doc(env, store, base_update)]
+    render(env, store, base_torender)]
+  if CONFIG.auto_documentation
+    push!(exprs, render_doc(env, store, base_update))
+  end
 
   for (f, f_ori) in zip(lowerings, lowerings_ori)
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
@@ -325,7 +327,7 @@ function _map_args(new_to_old, innerargs)
   map(innerargs) do a
     # pure ``_`` is currently buggy, see https://github.com/JuliaLang/julia/issues/32727
     # hence we use ::Any instead
-    get(new_to_old, a, :(::Any))
+    get(new_to_old, a, Expr(:(::), Symbol("'", a, "'"), :(Any)))
   end
 end
 
@@ -541,20 +543,20 @@ function TraitsFunctionParsed(env, func_parsed::Parsers.Function_Parsed, expr_or
     end
   end
 
-  traits_matches = map(enumerate(extra_wheres)) do (i, expr)
+  traits_matching_types = map(enumerate(extra_wheres)) do (i, expr)
     @match(expr) do f
-      f(x::Named_Parsed{:arg, <:Matchers.AnyOf}) = :(::Val{true})  # plain arguments are interpreted as bool
-      f(x::Named_Parsed{:func, Parsers.Call}) = x.expr.name == :! ? :(::Val{false}) : :(::Val{true}) # plain calls are assumed to refer to boolean expressions
-      f(x::Named_Parsed{<:Any, Parsers.TypeAnnotation}) = Expr(:(::), toAST(x.expr.type))
+      f(x::Named_Parsed{:arg, <:Matchers.AnyOf}) = :(Val{true})  # plain arguments are interpreted as bool
+      f(x::Named_Parsed{:func, Parsers.Call}) = (x.expr.name == :!) ? :(Val{false}) : :(Val{true})  # plain calls are assumed to refer to boolean expressions
+      f(x::Named_Parsed{<:Any, Parsers.TypeAnnotation}) = toAST(x.expr.type)
       function f(x::Named_Parsed{<:Any, Parsers.TypeRange})
         tr = x.expr
         @assert !(tr.lb === Union{} && tr.ub == Any) "should have at least an upperbound or a lowerbound"
         if tr.lb === Union{}  # only upperbound
-          :(::Type{<:$(toAST(tr.ub))})
+          :(Type{<:$(toAST(tr.ub))})
         elseif tr.ub === Any  # only LowerBound
-          :(::Type{>:$(toAST(tr.lb))})
+          :(Type{>:$(toAST(tr.lb))})
         else  # both
-          :(::Type{T} where {$(toAST(tr.lb)) <: T <: $(toAST(tr.up))})
+          :(Type{T} where {$(toAST(tr.lb)) <: T <: $(toAST(tr.up))})
         end
       end
     end
@@ -597,8 +599,12 @@ function TraitsFunctionParsed(env, func_parsed::Parsers.Function_Parsed, expr_or
   end
 
   old_to_new = Dict(v => k for (k, v) in merge(innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping))
+  # TODO we currently do not normalize the traits function names
+  # TODO e.g. using both ``Base.IteratorSize(a)`` and ``IteratorSize(a)`` result in two different traits currently
   traits_normalized = _change_symbols(traits_filtered, old_to_new)
-  traits_mapping = Dict(zip(traits_normalized, traits_matches))
+  # we map the traitsdefinition to a signature including a name for easier debugging and the correct type
+  traits_mapping = Dict(k => Expr(:(::), Symbol("'", k, "'"), v)
+                        for (k, v) in zip(traits_normalized, traits_matching_types))
   # we may encounter no traits at all, namely in the case where a default clause is defined
   innerargs_traits = isempty(traits_normalized) ? [] : sortexpr(unique(traits_normalized))
   outerfunc′ = (

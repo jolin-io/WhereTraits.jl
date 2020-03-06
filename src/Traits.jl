@@ -1,6 +1,5 @@
 module Traits
-export @traits, @traits_test, @traits_show_implementation,
-  isdef, Out, NotApplicable, @create_newtype
+export @traits, @traits_test, @traits_show_implementation
 
 @Base.kwdef mutable struct _Config
   # set to false because ``@suppress`` does currently not work with function definitions
@@ -24,6 +23,5 @@ include("Syntax/Syntax.jl")
 using .Syntax
 
 include("BasicTraits.jl")
-include("IsDef.jl")
-using .IsDef
+
 end # module

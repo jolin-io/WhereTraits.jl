@@ -174,24 +174,31 @@ end
 # ====================
 
 @testset "overwritability" begin
-  @traits_test ow(a::A) where {A, IteratorSize(A)::Base.HasLength} = length(a)
-  @traits_test ow(a::A) where {A, IteratorSize(A)::Base.HasShape} = shape(a)
-  @traits_test ow(a::A) where {A, IteratorSize(A)::Base.SizeUnknown} = 3
+  @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
+  @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = shape(a)
+  @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 3
+  mod_traitsdef1, store1 = Traits.Syntax.getorcreatestore!(@__MODULE__, :ow)
   expr1 = @traits_show_implementation ow
+
   # @test length(expr1.args) == 4
-  @traits_test ow(a::A) where {A, IteratorSize(A)::Base.SizeUnknown} = 8
+  @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 8
+  mod_traitsdef2, store2 = Traits.Syntax.getorcreatestore!(@__MODULE__, :ow)
   expr2 = @traits_show_implementation ow
   # @test length(expr2.args) == 4
-  @test length(expr1.args) == length(expr2.args)
-
-  expr3 = @traits_show_implementation ow
-  @test length(expr3.args) == 0
+  @test length(values(store1.definitions)) == length(values(store2.definitions))
+  for ((outerfunc1, innerfuncs1), (outerfunc2, innerfuncs2)) in zip(values(store1.definitions), values(store2.definitions))
+    @test length(innerfuncs1) == length(innerfuncs2)
+  end
 
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = size(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = nothing
-  expr4 = @traits_show_implementation ow
-  @test length(expr1.args) == length(expr4.args)
+  mod_traitsdef3, store3 = Traits.Syntax.getorcreatestore!(@__MODULE__, :ow)
+  expr3 = @traits_show_implementation ow
+  @test length(values(store1.definitions)) == length(values(store3.definitions))
+  for ((outerfunc1, innerfuncs1), (outerfunc3, innerfuncs3)) in zip(values(store1.definitions), values(store3.definitions))
+    @test length(innerfuncs1) == length(innerfuncs3)
+  end
 end
 
 # Test varargs and varkwargs
@@ -238,3 +245,8 @@ end
 # both module A and module B
 
 # TODO test that ``@traits f(a, b)`` indeed inserts two where variables T1 and T2
+
+
+# TODO test that traits are normalized correctly
+# TODO we currently do not normalize the traits function names
+# TODO e.g. using both ``Base.IteratorSize(a)`` and ``IteratorSize(a)`` should result in the same trait, but don't do currently
