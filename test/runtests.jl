@@ -16,7 +16,3 @@ end
 @testset "BasicTraits" begin
   include("BasicTraits.jl")
 end
-
-@testset "IsDef" begin
-  include("isdef.jl")
-end

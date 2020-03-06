@@ -1,7 +1,7 @@
 name = "Traits"
 uuid = "5060dc80-e054-11e8-0acc-1dc6592f659e"
 authors = ["Sahm Stephan <stephan.sahm@gmx.de>"]
-version = "0.5.0"
+version = "0.5.1"
 
 [deps]
 ASTParser = "3311a090-b55d-11e9-176d-dbdfc6a88253"
