@@ -1,4 +1,4 @@
-# Traits.jl
+<h1> Traits.jl </h1>
 
 Welcome to `Traits.jl`. This package exports one powerful macro `@traits` with which you can extend Julia's
 where syntax. Concretely the following are supported:
@@ -56,6 +56,23 @@ help?> h
 ```
 
 Last but not least the macro is implemented to support proper pre-compilation as normal.
+
+*Warning: While the dispatch works for dynamic functions, it will only be able to create optimal code if your traits function supports proper type-inference. E.g. you can use `Base.isempty`, however type-inference cannot see whether it will return true or false by static inspection. Hence it will use slower dynamic code.*
+
+
+
+
+**Table of Contents**
+<!-- TOC START min:1 max:3 link:true asterisk:true update:true -->
+  * [Installation & Import](#installation--import)
+  * [Implementation Details](#implementation-details)
+  * [Performance + Comparison with mauro3/SimpleTraits.jl](#performance--comparison-with-mauro3simpletraitsjl)
+  * [Traits.BasicTraits](#traitsbasictraits)
+  * [Dispatch on whether functions are defined - using IsDef.jl](#dispatch-on-whether-functions-are-defined---using-isdefjl)
+  * [Current Restrictions and Future Plans](#current-restrictions-and-future-plans)
+<!-- TOC END -->
+
+
 
 ## Installation & Import
 
@@ -154,9 +171,10 @@ While the syntax mapping to an outerfunction and respective innerfunctions feels
 
 ## Performance + Comparison with [mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)
 
-The following examples mirrors  https://github.com/mauro3/SimpleTraits.jl#performance.
-We start with defining a custom function ``fn``, a custom Trait ``Tr`` and some methods for ``fn`` dispatching on the trait.
-As you see, this package recommends to use julia's standard dispatch mechanism instead of custom macro definitions. This way the interactions with normal, non-trait-based dispatch becomes way more natural.
+For a high-level comparison between ``Traits.@traits`` and ``SimpleTraits.jl`` see the respective [discourse discussion](https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5?u=schlichtanders).
+
+The following examples mirror https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch.
+We start with defining a custom function ``fn``, a custom Trait function ``isTr`` and some methods for ``fn`` dispatching on the trait.
 ```julia
 isTr(_) = false
 
@@ -199,3 +217,100 @@ julia> @code_native fn(Float16(5))
     nopw    %cs:(%rax,%rax)
 ; └
 ```
+
+## Traits.BasicTraits
+
+For anology with SimpleTraits.jl, this package comes with standard traits definitions
+``ismutable``, ``isimmutable``, `isiterable`, `iscallable`, `isbitstype`, `isconcretetype`. They mostly just wrap respective standard definitions in ``Base``, with the added benefit, that they behave similarly to `Base.eltype` in that they have the convenience fallback `ismutable(value) = ismutable(typeof(value))`.
+
+You can use these by executing the following
+```julia
+using Traits
+using Traits.BasicTraits
+Traits.BasicTraits.@overwrite_Base
+
+ismutable(1)  # false
+ismutable("string")  # true
+ismutable(String)  # true
+```
+
+Please consult the file [test/BasicTraits.jl](https://github.com/schlichtanders/Traits.jl/blob/master/test/BasicTraits.jl) for more examples.
+
+
+## Dispatch on whether functions are defined - using [IsDef.jl](https://github.com/schlichtanders/IsDef.jl)
+
+You want to dispatch on whether a function is defined or not? I guess this is a standard scenario and hence I tried to support it, and extracted it into another package.
+
+[IsDef.jl](https://github.com/schlichtanders/IsDef.jl) exports two functions `isdef` and `Out` with which you can dispatch on whether functions are defined or not.
+([IsDef.jl](https://github.com/schlichtanders/IsDef.jl) is a sub-dependency of Traits.jl, so you should already have it installed).
+With `IsDef.isdef`/`IsDef.Out` and ``Traits.@traits`` we can define typesafe dispatch like follows:
+
+```julia
+using Traits
+using IsDef
+using Test
+
+struct MyError <: Exception
+  msg::AbstractString
+end
+MyError() = MyError("")
+
+@traits typesafe_call(f, a::T) where {T, isdef(f, T)} = f(a)
+# note that you can also use isdef on args directly, like you can use eltype on args
+# however this will be recognized as a different traitfunction compared to isdef(f, T)
+# which can lead to ambiguous overloadings. Just good to keep in mind
+@traits typesafe_call(f, a) where {!isdef(f, a)} = throw(MyError("given function cannot work with given arg"))
+@code_llvm typesafe_call(x -> x+2, 4)  # looks really good
+
+@test typesafe_call(x -> x+2, 4) == 6
+@test_throws MyError typesafe_call(x -> x+2, "string")
+
+
+@traits typesafe_out(f, a) where {Out(f, a) <: Number} = f(a) + 6
+@traits typesafe_out(f, a) where {Out(f, a) <: String} = "yeah $(f(a))!"
+@traits typesafe_out(f, a) = throw(MyError("no match"))
+
+@test typesafe_out(x -> 3x, 1) == 9
+@test typesafe_out(x -> "$x $x", 1) == "yeah 1 1!"
+@test_throws MyError typesafe_out(x -> convert(Vector, x), 1)
+
+
+# more complex case with dependencies among functions
+@traits function typesafe_aggregate(a::Vector{A}, introduce, combine) where
+    {A, isdef(introduce, A), isdef(combine, Out(introduce, A), Out(introduce, A))}
+
+  reduce(combine, introduce.(a))
+end
+@traits typesafe_aggregate(a::Vector, introduce, combine) = throw(MyError("TypeError"))
+
+@test typesafe_aggregate(["this","is","a","test"], length, +) == 11
+@test typesafe_aggregate(["this","is","a","test"], length, *) == 32
+@test typesafe_aggregate(["this","is","a","test"], x -> "$x ", *) == "this is a test "
+@test_throws MyError typesafe_aggregate(["this","is","a", "test"], x->x, +)
+```
+
+This is very powerful. Be warned that `IsDef` has limitations currently because julia type-inference has limitations. Luckily the type-inference is already very good with concrete-types, which is what we need for dispatch.
+
+
+## Current Restrictions and Future Plans
+
+Currently the ``@traits`` macro has some known restrictions which are soon to be solved:
+* the extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
+
+    The plan is to fix this by looking up method definitions in the caller module.
+
+* currently **only top-level functions** are directly supported, as the syntax stores and needs information about previous function definitions. An alternative syntax is planned which will support `@traits` on functions within other scopes like functions in functions.
+
+    The idea I have is to support a block syntax alternative
+    which assumes that there is no further outer state to take into account, but the block stands on its own. This would still look a bit clumsy, but semantically it is probably the way to go.
+```julia
+function func()
+  @traits begin  # not yet supported
+    function nested(a) where ...
+    end
+    function nested(a) where ...
+    end
+  end
+end
+```
+* The ``@traits`` currently does not work well within the `Test.@testset` macro. As a workaround Traits.jl exports a `@traits_test` variant which works better, but still has cases where it fails. This needs to be investigated further, and maybe needs a fix on ``Test.@testset``, don't know.

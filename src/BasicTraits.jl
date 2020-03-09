@@ -1,5 +1,5 @@
 module BasicTraits
-export @overwrite_Base, ismutable, isimmutable, isiterable, iscallable,
+export ismutable, isimmutable, isiterable, iscallable,
   isbitstype, isconcretetype
 
 macro overwrite_Base()
