@@ -1,6 +1,5 @@
 using Traits
 using Test
-using ASTParser
 
 # Test standard dispatch
 # ======================

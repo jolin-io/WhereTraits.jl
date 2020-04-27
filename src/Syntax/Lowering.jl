@@ -1,22 +1,22 @@
 module Lowering
 export lower_args_default
 
-using ASTParser
+using ExprParsers
 using Setfield
 using Traits.Utils
 
 
-lower_args_default(expr::Expr) = lower_args_default(Parsers.Function()(expr))
-function lower_args_default(func_parsed::Parsers.Function_Parsed)
-  args_parsed = map(Parsers.Arg(), func_parsed.args)
+lower_args_default(expr::Expr) = lower_args_default(parse_expr(EP.Function(), expr))
+function lower_args_default(func_parsed::EP.Function_Parsed)
+  args_parsed = [parse_expr(EP.Arg(), a) for a in func_parsed.args]
   defaults = [a.default for a in args_parsed]
   @assert _nodefault_only_at_front(defaults) "no normal positional argument allowed after positional argument with default value"
-  count_defaults = sum(d isa NoDefault ? 0 : 1 for d in defaults)
+  count_defaults = sum(d isa EP.NoDefault ? 0 : 1 for d in defaults)
 
   # collect several expressions
 
   # the whole function is returned without defaults
-  args = [toAST(@set a.default = nodefault) for a in args_parsed]
+  args = [to_expr(@set a.default = EP.nodefault) for a in args_parsed]
   func_without_defaults = @set func_parsed.args = args
   # collect all lowerings
   lowerings = []
@@ -28,10 +28,10 @@ function lower_args_default(func_parsed::Parsers.Function_Parsed)
       !depends_on(expr, dropped_symbols)
     end
 
-    lowering = Parsers.Function_Parsed(
+    lowering = EP.Function_Parsed(
       name = func_parsed.name,
       curlies = copy(func_parsed.curlies),
-      args = [toAST(@set a.default = nodefault) for a in args_parsed[1:end-i]],
+      args = [to_expr(@set a.default = EP.nodefault) for a in args_parsed[1:end-i]],
       kwargs = [],
       # the traits normalization kicks out all unused wheres where TypeVariables matter
       # but dependencies on args still need to be handled
@@ -49,7 +49,7 @@ function _nodefault_only_at_front(defaults::Vector)
     true
   else
     first = defaults[1]
-    if first isa NoDefault
+    if first isa EP.NoDefault
       _nodefault_only_at_front(defaults[2:end])
     else
       _no_nodefault_any_more(defaults[2:end])
@@ -62,7 +62,7 @@ function _no_nodefault_any_more(defaults::Vector)
     true
   else
     first = defaults[1]
-    if first isa NoDefault
+    if first isa EP.NoDefault
       false
     else
       _no_nodefault_any_more(defaults[2:end])

@@ -4,8 +4,8 @@ authors = ["Sahm Stephan <stephan.sahm@gmx.de>"]
 version = "0.5.1"
 
 [deps]
-ASTParser = "3311a090-b55d-11e9-176d-dbdfc6a88253"
 DataTypesBasic = "83eed652-29e8-11e9-12da-a7c29d64ffc9"
+ExprParsers = "c5caad1f-83bd-4ce8-ac8e-4b29921e994e"
 Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 ProxyInterface = "90c4b210-f34a-11e9-1a87-5d0d3aaf0cab"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"

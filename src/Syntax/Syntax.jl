@@ -2,7 +2,7 @@ module Syntax
 export @traits, @traits_test, @traits_show_implementation
 
 using DataTypesBasic
-using ASTParser
+using ExprParsers
 using SimpleMatch
 using Traits: CONFIG
 using Traits.Utils
@@ -50,17 +50,17 @@ end
 
 
 function _traits(env, expr::Expr, expr_original::Expr)
-  parser = Matchers.AnyOf(Parsers.Function(), anything)
-  _traits_parsed(env, parser(expr), expr_original)
+  parser = EP.AnyOf(EP.Function(), EP.anything)
+  _traits_parsed(env, parse_expr(parser, expr), expr_original)
 end
 
-function _traits_parsed(env, func_parsed::Parsers.Function_Parsed, expr_original::Expr)
+function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Expr)
   mod_traitsdef, store::TraitsStore = getorcreatestore!(env.mod, func_parsed.name)
-  func_parsed_original = Parsers.Function()(expr_original)
+  func_parsed_original = parse_expr(EP.Function(), expr_original)
 
   basefunc, lowerings = lower_args_default(func_parsed)
   basefunc_ori, lowerings_ori = lower_args_default(func_parsed_original)
-  basefunc_outer, basefunc_inner = TraitsFunctionParsed(env, basefunc, toAST(basefunc_ori))
+  basefunc_outer, basefunc_inner = TraitsFunctionParsed(env, basefunc, to_expr(basefunc_ori))
   store, base_update, base_torender = merge(store, basefunc_outer, basefunc_inner)
   exprs = Any[
     render_store_reference(env, store),
@@ -71,7 +71,7 @@ function _traits_parsed(env, func_parsed::Parsers.Function_Parsed, expr_original
 
   for (f, f_ori) in zip(lowerings, lowerings_ori)
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
-    lowered_outer, lowered_inner = TraitsFunctionParsed(env, f, toAST(f_ori), on_traits_dropped = msg -> nothing)
+    lowered_outer, lowered_inner = TraitsFunctionParsed(env, f, to_expr(f_ori), on_traits_dropped = msg -> nothing)
     store, lowered_update, lowered_torender = merge(store, lowered_outer, lowered_inner)
     push!(exprs, render(env, store, lowered_torender))
   end
@@ -80,16 +80,16 @@ function _traits_parsed(env, func_parsed::Parsers.Function_Parsed, expr_original
 end
 
 
-function _traits_parsed(env, parsed)
-  throw(ArgumentError("@traits macro expects function expression"))
+function _traits_parsed(env, parsed, expr_original)
+  throw(ArgumentError("@traits macro expects function expression, got ``$expr_original``"))
 end
 
 # # TODO should we Deprecate this syntax?
-# function _traits(mod, block_parsed::Parsers.Block_Parsed)
+# function _traits(mod, block_parsed::EP.Block_Parsed)
 #   # @traits on block doesn't use any global state
 #   store = TraitsStore()
-#   parser = Matchers.AnyOf(Parsers.Function(), anything)
-#   funcs = [p for p in [parser(a) for a in block_parsed.exprs] if p isa Parsers.Function]
+#   parser = EP.AnyOf(EP.Function(), EP.anything)
+#   funcs = [p for p in [parser(a) for a in block_parsed.exprs] if p isa EP.Function]
 #   for f in funcs
 #     outerfunc, innerfunc = TraitsFunctionParsed(mod, f)
 #     merge!(store, outerfunc, innerfunc)
@@ -112,7 +112,7 @@ struct Reference
   isoriginalmodule::Bool
   name::Symbol
 end
-ASTParser.toAST(r::Reference) = :($(r.mod).$(r.name))
+ExprParsers.to_expr(r::Reference) = :($(r.mod).$(r.name))
 
 struct TraitsStore
   # we need to be able to overwrite not only the outer function, but also the inner function
@@ -287,7 +287,7 @@ function render_store_reference(env::MacroEnv, store::TraitsStore)
     # for the initial definition
     name = name.name
   end
-  :(function $(toAST(name))()
+  :(function $(to_expr(name))()
     $store
   end)
 end
@@ -355,7 +355,7 @@ function render(env::MacroEnv, store::TraitsStore, torender::RenderInnerFunc)
     name = name.name
   end
 
-  innerfunc_parsed = Parsers.Function_Parsed(
+  innerfunc_parsed = EP.Function_Parsed(
     name = name,
     curlies = [],
     args = args,
@@ -363,7 +363,7 @@ function render(env::MacroEnv, store::TraitsStore, torender::RenderInnerFunc)
     wheres = [],
     body = innerfunc.nonfixed.body
   )
-  toAST(innerfunc_parsed)
+  to_expr(innerfunc_parsed)
 end
 
 """
@@ -382,7 +382,7 @@ function render(env::MacroEnv, store::TraitsStore, torender::RenderOuterFunc)
     _BetweenTypeVarsAndTraits();
     outerfunc.nonfixed.innerargs_traits;
   ]
-  innerfunc_call = Parsers.Call_Parsed(
+  innerfunc_call = EP.Call_Parsed(
     name = store.global_innerfunction_reference,
     curlies = [],
     args = innerargs,
@@ -391,7 +391,7 @@ function render(env::MacroEnv, store::TraitsStore, torender::RenderOuterFunc)
   # add LineNumberNode for debugging purposes
   body = Expr(:block, env.source, innerfunc_call)
 
-  outerfunc_parsed = Parsers.Function_Parsed(
+  outerfunc_parsed = EP.Function_Parsed(
     name = outerfunc.fixed.name,
     curlies = outerfunc.fixed.curlies,
     args = outerfunc.fixed.args,
@@ -399,7 +399,7 @@ function render(env::MacroEnv, store::TraitsStore, torender::RenderOuterFunc)
     wheres = outerfunc.fixed.wheres,
     body = body,
   )
-  toAST(outerfunc_parsed)
+  to_expr(outerfunc_parsed)
 end
 
 """
@@ -413,7 +413,7 @@ function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
   innerfuncs = torender.inners
   innerfunc = torender.inner
 
-  signature = toAST(Parsers.Signature_Parsed(
+  signature = to_expr(EP.Signature_Parsed(
     name = outerfunc.fixed.name,
     curlies = outerfunc.fixed.curlies,
     args = outerfunc.fixed.args,
@@ -438,7 +438,7 @@ function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
     push!(doc_exprs, signature_original)
     # manual doc string of respective inner function
     push!(doc_exprs, :(Traits.Utils.DocsHelper.mygetdoc(
-      $(toAST(store.global_innerfunction_reference)),
+      $(to_expr(store.global_innerfunction_reference)),
       Tuple{Type{$(outerfunc.fixed.signature)}, Type{$(innerfunc_fixed_to_doctype(fixed))}})))
     # automatic doc string of inner function definition
     expr_original = Markdown.parse("Original @traits definition:\n```julia\n$(nonfixed.expr_original)\n```")
@@ -456,7 +456,7 @@ function render_doc(env::MacroEnv, store::TraitsStore, torender::TraitsUpdate)
   if env.mod === name.mod
     name = name.name
   end
-  name = toAST(name)
+  name = to_expr(name)
 
   quote
     # first the documentation of the inner function as this needs to be updated BEFORE the outer doc-string
@@ -481,82 +481,81 @@ end
 # Syntax Parser
 # =============
 
-TraitsFunctionParsed(env, expr::Expr, expr_original; kwargs...) = TraitsFunctionParsed(env, Parsers.Function()(expr), expr_original; kwargs...)
-function TraitsFunctionParsed(env, func_parsed::Parsers.Function_Parsed, expr_original; on_traits_dropped = msg -> throw(ArgumentError(msg)))
+TraitsFunctionParsed(env, expr::Expr, expr_original; kwargs...) = TraitsFunctionParsed(env, EP.Function()(expr), expr_original; kwargs...)
+function TraitsFunctionParsed(env, func_parsed::EP.Function_Parsed, expr_original; on_traits_dropped = msg -> throw(ArgumentError(msg)))
   # Parse main syntax
   # =================
-  args_names = [Parsers.Arg()(arg).name for arg in func_parsed.args]
-  args_names_matcher = Matchers.AnyOf(args_names...)
+  args_names = [parse_expr(EP.Arg(), arg).name for arg in func_parsed.args]
+  args_names_matcher = EP.AnyOf(args_names...)
   # TODO we could also allow dispatch on keyword arguments
-  # kwargs_names = [Parsers.Arg()(kwarg).name for kwarg in func_parsed.kwargs]
-  # kwargs_names_matcher = Matchers.AnyOf(kwargs_names...)
+  # kwargs_names = [EP.Arg()(kwarg).name for kwarg in func_parsed.kwargs]
+  # kwargs_names_matcher = EP.AnyOf(kwargs_names...)
 
-  whereexpr_parser = Matchers.AnyOf(
+  whereexpr_parser = EP.AnyOf(
     # we allow dispatch on arguments
-    Named{:arg}(args_names_matcher), # interpreted as bool
-    Named{:arg}(Parsers.TypeAnnotation(name=args_names_matcher)),
-    Named{:arg}(Parsers.TypeRange(name=args_names_matcher)),
+    EP.Named{:arg}(args_names_matcher), # interpreted as bool
+    EP.Named{:arg}(EP.TypeAnnotation(name=args_names_matcher)),
+    EP.Named{:arg}(EP.TypeRange(name=args_names_matcher)),
 
     # TODO we could also allow dispatch on keyword arguments
     # How? we store all kwargs per signature and then define traitfunctions like ``func(kwargs[:b])``
-    # Named{:kwarg}(kwargs_names_matcher), # interpreted as bool
-    # Named{:kwarg}(Parsers.TypeAnnotation(name=kwargs_names_matcher)),
-    # Named{:kwarg}(Parsers.TypeRange(name=kwargs_names_matcher)),
+    # EP.Named{:kwarg}(kwargs_names_matcher), # interpreted as bool
+    # EP.Named{:kwarg}(EP.TypeAnnotation(name=kwargs_names_matcher)),
+    # EP.Named{:kwarg}(EP.TypeRange(name=kwargs_names_matcher)),
 
     # all other symbols refer to standard TypeVariables
     # TypeAnnotation on TypeVar make only sense in the special case that the typevariable can take different types of binary type
     # both Symbol and TypeRange are normal where syntax, TypeAnnotation is not
-    Named{:normal}(Parsers.Symbol()),
-    Named{:typevar}(Parsers.TypeAnnotation(name=Parsers.Symbol())),
-    Named{:normal}(Parsers.TypeRange(name=Parsers.Symbol())),
+    EP.Named{:normal}(EP.anysymbol),
+    EP.Named{:typevar}(EP.TypeAnnotation(name=EP.anysymbol)),
+    EP.Named{:normal}(EP.TypeRange(name=EP.anysymbol)),
 
     # we further allow to dispatch on functions from either args, kwargs, or standard typevars
     # which should be all the rest
-    Named{:func}(Parsers.Call()),  # interpreted as bool
-    Named{:func}(Parsers.TypeAnnotation()),
-    Named{:func}(Parsers.TypeRange()),
+    EP.Named{:func}(EP.Call()),  # interpreted as bool
+    EP.Named{:func}(EP.TypeAnnotation()),
+    EP.Named{:func}(EP.TypeRange()),
   )
-  parsed_wheres = map(whereexpr_parser, func_parsed.wheres)
+  parsed_wheres = [parse_expr(whereexpr_parser, w) for w in func_parsed.wheres]
   normal_wheres, extra_wheres = filtersplit(parsed_wheres) do x
-    x isa Parsers.Named_Parsed{:normal}
+    x isa EP.Named{:normal}
   end
-
 
   # prepare extra wheres
   # ====================
 
   traits = map(extra_wheres) do expr
     @match(expr) do f
-      f(x::Named_Parsed{:arg, <:Matchers.AnyOf}) = :(Val{$(toAST(x.expr))}())  # plain arguments are interpreted as bool
+      f(x::EP.Named{:arg, Symbol}) = :(Val{$(to_expr(x.value))}())  # plain arguments are interpreted as bool
       # plain calls are assumed to refer to boolean expressions
-      function f(x::Named_Parsed{:func, Parsers.Call})
-        if x.expr.name == :!
+      function f(x::EP.Named{:func, EP.Call_Parsed})
+        if x.value.name == :!
           # if the last call is negation "!" we take the thing which is negated
           # as a trait function and dispatch on False
-          :(Val{$(toAST(x.expr.args[1]))}())
+          :(Val{$(to_expr(x.value.args[1]))}())
         else
-          :(Val{$(toAST(x.expr))}())
+          :(Val{$(to_expr(x.value))}())
         end
       end
-      f(x::Named_Parsed{<:Any, Parsers.TypeAnnotation}) = toAST(x.expr.name)
-      f(x::Named_Parsed{<:Any, Parsers.TypeRange}) = toAST(x.expr.name)
+      f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = to_expr(x.value.name)
+      f(x::EP.Named{<:Any, EP.TypeRange_Parsed}) = to_expr(x.value.name)
     end
   end
 
   traits_matching_types = map(enumerate(extra_wheres)) do (i, expr)
     @match(expr) do f
-      f(x::Named_Parsed{:arg, <:Matchers.AnyOf}) = :(Val{true})  # plain arguments are interpreted as bool
-      f(x::Named_Parsed{:func, Parsers.Call}) = (x.expr.name == :!) ? :(Val{false}) : :(Val{true})  # plain calls are assumed to refer to boolean expressions
-      f(x::Named_Parsed{<:Any, Parsers.TypeAnnotation}) = toAST(x.expr.type)
-      function f(x::Named_Parsed{<:Any, Parsers.TypeRange})
-        tr = x.expr
+      f(x::EP.Named{:arg, Symbol}) = :(Val{true})  # plain arguments are interpreted as bool
+      f(x::EP.Named{:func, EP.Call_Parsed}) = (x.value.name == :!) ? :(Val{false}) : :(Val{true})  # plain calls are assumed to refer to boolean expressions
+      f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = to_expr(x.value.type)
+      function f(x::EP.Named{<:Any, EP.TypeRange_Parsed})
+        tr = x.value
         @assert !(tr.lb === Union{} && tr.ub == Any) "should have at least an upperbound or a lowerbound"
         if tr.lb === Union{}  # only upperbound
-          :(Type{<:$(toAST(tr.ub))})
+          :(Type{<:$(to_expr(tr.ub))})
         elseif tr.ub === Any  # only LowerBound
-          :(Type{>:$(toAST(tr.lb))})
+          :(Type{>:$(to_expr(tr.lb))})
         else  # both
-          :(Type{T} where {$(toAST(tr.lb)) <: T <: $(toAST(tr.up))})
+          :(Type{T} where {$(to_expr(tr.lb)) <: T <: $(to_expr(tr.up))})
         end
       end
     end
@@ -565,14 +564,14 @@ function TraitsFunctionParsed(env, func_parsed::Parsers.Function_Parsed, expr_or
   # normalize first function dispatch level
   # =======================================
 
-  outerfunc_parsed = Parsers.Function_Parsed(
+  outerfunc_parsed = EP.Function_Parsed(
     name = func_parsed.name,
     curlies = func_parsed.curlies,
     args = func_parsed.args,
     kwargs = [],
-    # we need to use toAST here, as normalize_func expects a
+    # we need to use to_expr here, as normalize_func expects a
     # standard Function_Parsed, where wheres is a list of Expr
-    wheres = toAST(normal_wheres),
+    wheres = to_expr(normal_wheres),
     body = :nothing
   )
 
@@ -585,8 +584,8 @@ function TraitsFunctionParsed(env, func_parsed::Parsers.Function_Parsed, expr_or
 
   typevars_old = map(normal_wheres) do parsed
     @match(parsed) do f
-      f(x::Parsers.Named_Parsed{:normal, Parsers.Symbol}) = x.expr.symbol
-      f(x::Parsers.Named_Parsed{:normal, Parsers.TypeRange}) = x.expr.name.symbol
+      f(x::EP.Named{:normal, Symbol}) = x.value
+      f(x::EP.Named{:normal, EP.TypeRange_Parsed}) = x.value.name
     end
   end
   kept_typevars_old = values(innerfunc_fixed.typevars_mapping)
@@ -640,17 +639,17 @@ _change_symbols(expr::Expr, symbol_mapping) = Expr(expr.head, _change_symbols(ex
 
 struct _BetweenCurliesAndArgs end
 
-normalize_func(mod, func_expr::Expr) = normalize_func(mod, Parsers.Function()(func_expr))
-function normalize_func(mod, func_parsed::Parsers.Function_Parsed)
-  args_parsed = map(Parsers.Arg(), func_parsed.args)
-  @assert all(arg -> arg.default isa NoDefault, args_parsed) "Can only normalize functions without positional default arguments"
+normalize_func(mod, func_expr::Expr) = normalize_func(mod, EP.Function()(func_expr))
+function normalize_func(mod, func_parsed::EP.Function_Parsed)
+  args_parsed = [parse_expr(EP.Arg(), a) for a in func_parsed.args]
+  @assert all(arg -> arg.default isa EP.NoDefault, args_parsed) "Can only normalize functions without positional default arguments"
 
   # normalize types
   # ---------------
   # we add _BetweenCurliesAndArgs to reuse ``type`` as identifying signature without mixing curly types and arg types
   typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
-    _BetweenCurliesAndArgs, (toAST(a.type) for a in args_parsed)...)
-  typeexpr_full = :($typeexpr where {$(toAST(func_parsed.wheres)...)})
+    _BetweenCurliesAndArgs, (to_expr(a.type) for a in args_parsed)...)
+  typeexpr_full = :($typeexpr where {$(to_expr(func_parsed.wheres)...)})
   type = Base.eval(mod, typeexpr_full)
   typebase, typevars_old = split_typevar(type)  # typebase == Tuple{P1, P2, P3, ...}
   typeexprs_new, typevars_new, typevar_new_to_old = normalize_typevars(typebase.parameters, typevars_old)

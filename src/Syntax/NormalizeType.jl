@@ -2,7 +2,7 @@ module NormalizeType
 export normalize_typevars, split_typevar
 
 using Traits.Utils
-using ASTParser
+using ExprParsers
 
 const VectorLike = Union{Vector, Tuple, Core.SimpleVector}
 const True = Val{true}
@@ -52,7 +52,7 @@ function _normalize_typevars(types::VectorLike, typevar_context, typevar_old_to_
 end
 
 function _simplify_type(varargexpr::Expr)
-  parsed = Parsers.Type()(varargexpr)
+  parsed = parse_expr(EP.Type(), varargexpr)
 
   isdroppable(other) = false
   isdroppable(sym::Symbol) = sym in parsed.wheres
@@ -64,7 +64,7 @@ function _simplify_type(varargexpr::Expr)
   end
   parsed.curlies = filter(x -> x ∉ droppable_curlies, parsed.curlies)
   parsed.wheres = filter(x -> x ∉ droppable_curlies, parsed.wheres)
-  toAST(parsed)
+  to_expr(parsed)
 end
 
 
@@ -72,7 +72,7 @@ end
 function _normalize_typevars(type::Type, typevar_context, typevar_old_to_new!, countfrom!, tuple_parents_only::True)
   typebase, extra_typevars = split_typevar(type)
   name = _name(typebase)
-  
+
   if name === :Vararg
     # Vararg behave different than all other types when used as TypeVar for Tuple, namely
     # Tuple{Vararg{T} where T} != (Tuple{Vararg{T}} where T)
@@ -201,7 +201,7 @@ end
 function _normalize_unionall(tv::TypeVar, typevar_context, typevar_old_to_new!, countfrom!::Base.Iterators.Stateful, tuple_parents_only::TrueFalse)
   lowerbound, lb_vars = _normalize_typevars(tv.lb, typevar_context, typevar_old_to_new!, countfrom!, False())
   upperbound, ub_vars = _normalize_typevars(tv.ub, typevar_context, typevar_old_to_new!, countfrom!, False())
-  toAST(Parsers.TypeRange_Parsed(lowerbound, tv.name, upperbound)), [lb_vars; ub_vars]
+  to_expr(EP.TypeRange_Parsed(lowerbound, tv.name, upperbound)), [lb_vars; ub_vars]
 end
 
 # anything else, like Int or Symbol TypeVars
@@ -209,9 +209,9 @@ _normalize_typevars(any, typevars_old, typevar_old_to_new!, countfrom!, ::TrueFa
 _normalize_typevars(bounds::Type{Union{}}, _, _, _, ::True) = bounds, []
 _normalize_typevars(bounds::Type{Union{}}, _, _, _, ::False) = bounds, []
 
-normalized_typevar_by_position(position::Int) = Parsers.TypeRange_Parsed(Union{}, Symbol("T", position), Any)
-normalized_typevar_by_position(position::Int, ub) = Parsers.TypeRange_Parsed(Union{}, Symbol("T", position), ub)
-normalized_typevar_by_position(position::Int, lb, ub) = Parsers.TypeRange_Parsed(lb, Symbol("T", position), ub)
+normalized_typevar_by_position(position::Int) = EP.TypeRange_Parsed(Union{}, Symbol("T", position), Any)
+normalized_typevar_by_position(position::Int, ub) = EP.TypeRange_Parsed(Union{}, Symbol("T", position), ub)
+normalized_typevar_by_position(position::Int, lb, ub) = EP.TypeRange_Parsed(lb, Symbol("T", position), ub)
 
 split_typevar(base) = base, TypeVar[]
 function split_typevar(t::UnionAll)
@@ -223,7 +223,7 @@ function _expr_rewrap_typevars(typeexpr::Expr, typevars)
   Expr(:where, typeexpr, typevars...)
 end
 function _expr_rewrap_typevars(typeexpr::Expr, typevars::Vector{TypeVar})
-  _expr_rewrap_typevars(typeexpr, toAST.(typevars))
+  _expr_rewrap_typevars(typeexpr, to_expr.(typevars))
 end
 
 end  # module

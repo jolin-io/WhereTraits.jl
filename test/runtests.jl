@@ -6,7 +6,7 @@ using Test
 end
 
 @testset "syntax" begin
-  include("syntax/syntax.jl")
+  include("syntax.jl")
 end
 
 @testset "README" begin

@@ -2,7 +2,7 @@ module Utils
 export flatten_blocks, MacroEnv, @MacroEnv, unique_inner_function_name,
   unique_funcname, normalize_mod_and_name, Dict_to_normalizedType
 
-using ASTParser
+using ExprParsers
 
 # flatten out blocks
 flatten_blocks(expr::Expr) = flatten_blocks(Val{expr.head}(), expr.args)
@@ -37,11 +37,11 @@ function unique_funcname(mod, funcname)
   Symbol(mod′, :., funcname′)
 end
 function normalize_mod_and_name(mod, name)
-  parser = Matchers.AnyOf(Parsers.Symbol(), Parsers.NestedDot())
-  normalize_mod_and_name(mod, parser(name))
+  parser = EP.AnyOf(EP.anysymbol, EP.NestedDot())
+  normalize_mod_and_name(mod, parse_expr(parser, name))
 end
-normalize_mod_and_name(mod, name::Parsers.Symbol_Parsed) = mod, name.symbol
-function normalize_mod_and_name(mod, name::Parsers.NestedDot_Parsed)
+normalize_mod_and_name(mod, name::Symbol) = mod, name
+function normalize_mod_and_name(mod, name::EP.NestedDot_Parsed)
   mod′::Module = getproperty(mod, name.base)
   for field in name.properties[1:end-1]
     mod′ = getproperty(mod′, field)
