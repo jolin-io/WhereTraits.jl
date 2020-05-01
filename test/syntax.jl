@@ -17,6 +17,7 @@ using Test
   @test_throws MethodError fs2([1,2,3])
 end
 
+@traits fb2(a::Vector{A}) where {A, Base.isconcretetype(A)} = length(a)
 
 # Test boolean dispatch
 # =====================
@@ -30,10 +31,10 @@ end
   @test isnothing(fb([]))
   @test fb([43]) == 43
   @test_throws MethodError fb((1,2,3))
-
+  unreachablereached = @macroexpand @traits fb2(a::Vector{A}) where {A, Base.isconcretetype(A)} = length(a)
+  unreachablereached
   @traits_test fb2(a::Vector{A}) where {A, Base.isconcretetype(A)} = length(a)
   @traits_test fb2(a::Vector{A}) where {A, !Base.isconcretetype(A)} = length(a) + 1
-
   @test fb2([]) == 1  # Any is not concrete, length == 0
   @test fb2([3,5,.6]) == 3  # Float is concrete, length == 3
   @test_throws MethodError fb2((1,2,3))
@@ -176,12 +177,12 @@ end
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = shape(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 3
-  mod_traitsdef1, store1 = Traits.Syntax.getorcreatestore!(@__MODULE__, :ow)
+  store1 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr1 = @traits_show_implementation ow
 
   # @test length(expr1.args) == 4
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 8
-  mod_traitsdef2, store2 = Traits.Syntax.getorcreatestore!(@__MODULE__, :ow)
+  store2 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr2 = @traits_show_implementation ow
   # @test length(expr2.args) == 4
   @test length(values(store1.definitions)) == length(values(store2.definitions))
@@ -192,7 +193,7 @@ end
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = size(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = nothing
-  mod_traitsdef3, store3 = Traits.Syntax.getorcreatestore!(@__MODULE__, :ow)
+  store3 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr3 = @traits_show_implementation ow
   @test length(values(store1.definitions)) == length(values(store3.definitions))
   for ((outerfunc1, innerfuncs1), (outerfunc3, innerfuncs3)) in zip(values(store1.definitions), values(store3.definitions))

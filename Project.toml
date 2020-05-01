@@ -10,6 +10,7 @@ Markdown = "d6f4376e-aef5-505a-96c1-9c027394607a"
 ProxyInterface = "90c4b210-f34a-11e9-1a87-5d0d3aaf0cab"
 Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
 SimpleMatch = "a3ae8450-d22f-11e9-3fe0-77240e25996f"
+StructEquality = "6ec83bb0-ed9f-11e9-3b4c-2b04cb4e219c"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 
 [extras]

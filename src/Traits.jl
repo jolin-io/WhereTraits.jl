@@ -19,8 +19,18 @@ suppress_on_traits_definitions::Bool = false
 const CONFIG = _Config()
 
 include("Utils/Utils.jl")
+using .Utils
+
+# this syntax is so complex that we need to store a state for each function
+# which because of its complexity is defined in an extra submodule
+include("InternalState.jl")
+using .InternalState
+
 include("Syntax/Syntax.jl")
 using .Syntax
+
+include("ExtraHelpers.jl")
+using .ExtraHelpers
 
 include("BasicTraits.jl")
 
