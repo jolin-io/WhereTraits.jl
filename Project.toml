@@ -1,7 +1,7 @@
 name = "Traits"
 uuid = "5060dc80-e054-11e8-0acc-1dc6592f659e"
 authors = ["Sahm Stephan <stephan.sahm@gmx.de>"]
-version = "0.5.1"
+version = "0.5.2"
 
 [deps]
 DataTypesBasic = "83eed652-29e8-11e9-12da-a7c29d64ffc9"
