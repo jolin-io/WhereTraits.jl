@@ -30,7 +30,7 @@ end
 @def_structequal Base.@kwdef struct DefInnerFuncFixedPart
   args_mapping::Dict{Symbol, Symbol}
   typevars_mapping::Dict{Symbol, Symbol}
-  traits_mapping::Dict{Expr, Expr}
+  traits_mapping::Dict{Union{Symbol, Expr}, Union{Symbol, Expr}}
 end
 @def_structequal Base.@kwdef struct DefInnerFuncNonFixedPart
   kwargs::Vector{Expr}

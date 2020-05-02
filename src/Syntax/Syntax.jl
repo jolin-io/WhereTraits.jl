@@ -50,7 +50,7 @@ function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Exp
 
   for lowering in lowerings
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
-    lowered_outer, lowered_inner = DefTraitsFunction(env, lowering, expr_original, on_traits_dropped = msg -> nothing)
+    lowered_outer, lowered_inner = parse_traitsfunction(env, lowering, expr_original, on_traits_dropped = msg -> nothing)
     store, lowered_update, lowered_torender = merge(store, lowered_outer, lowered_inner)
     push!(exprs, render(env, store, lowered_torender))
   end

@@ -199,18 +199,32 @@ function normalize_func(mod, func_parsed::EP.Function_Parsed)
 
   # return
   # ------
+
   # we return the whole signature to easily decide whether the function overwrites another
+  # TODO we use call by position
+  # TODO because call by keyword leads to UnreachableReached, see https://github.com/JuliaLang/julia/issues/35698
   outerfunc_fixed = Traits.InternalState.DefOuterFuncFixedPart{type}(
     # everything under fixed should be identifiable via signature
-    signature = type,
-    name = func_parsed.name,
-    curlies = curlies_typeexprs_new,
-    args = args_parsed,
-    wheres = typevars_new,
+    type,
+    func_parsed.name,
+    curlies_typeexprs_new,
+    args_parsed,
+    typevars_new,
     # body information
-    innerargs_args = sort([a.name for a in args_parsed]),
-    innerargs_typevars = sort([tv.name for tv in typevars_new]),
+    sort([a.name for a in args_parsed]),
+    sort([tv.name for tv in typevars_new]),
   )
+  # outerfunc_fixed = Traits.InternalState.DefOuterFuncFixedPart{type}(
+  #   # everything under fixed should be identifiable via signature
+  #   signature = type,
+  #   name = func_parsed.name,
+  #   curlies = curlies_typeexprs_new,
+  #   args = args_parsed,
+  #   wheres = typevars_new,
+  #   # body information
+  #   innerargs_args = sort([a.name for a in args_parsed]),
+  #   innerargs_typevars = sort([tv.name for tv in typevars_new]),
+  # )
   # this innerfunc_fixed is only an intermediate state, hence we fallback to using plain namedtuples
   innerfunc_fixed = (
     args_mapping = arg_new_to_old,

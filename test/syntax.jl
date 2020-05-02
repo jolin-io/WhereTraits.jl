@@ -31,8 +31,6 @@ end
   @test isnothing(fb([]))
   @test fb([43]) == 43
   @test_throws MethodError fb((1,2,3))
-  unreachablereached = @macroexpand @traits fb2(a::Vector{A}) where {A, Base.isconcretetype(A)} = length(a)
-  unreachablereached
   @traits_test fb2(a::Vector{A}) where {A, Base.isconcretetype(A)} = length(a)
   @traits_test fb2(a::Vector{A}) where {A, !Base.isconcretetype(A)} = length(a) + 1
   @test fb2([]) == 1  # Any is not concrete, length == 0
@@ -186,8 +184,8 @@ end
   expr2 = @traits_show_implementation ow
   # @test length(expr2.args) == 4
   @test length(values(store1.definitions)) == length(values(store2.definitions))
-  for ((outerfunc1, innerfuncs1), (outerfunc2, innerfuncs2)) in zip(values(store1.definitions), values(store2.definitions))
-    @test length(innerfuncs1) == length(innerfuncs2)
+  for (def1, def2) in zip(values(store1.definitions), values(store2.definitions))
+    @test length(def1.inners) == length(def2.inners)
   end
 
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
@@ -196,8 +194,8 @@ end
   store3 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr3 = @traits_show_implementation ow
   @test length(values(store1.definitions)) == length(values(store3.definitions))
-  for ((outerfunc1, innerfuncs1), (outerfunc3, innerfuncs3)) in zip(values(store1.definitions), values(store3.definitions))
-    @test length(innerfuncs1) == length(innerfuncs3)
+  for (def1, def2) in zip(values(store1.definitions), values(store3.definitions))
+    @test length(def1.inners) == length(def2.inners)
   end
 end
 
