@@ -1,7 +1,8 @@
 module Rendering
-export render_store_reference, render, render_doc
+export merge_and_render_function, render_store_update
 import Traits
 using Traits.Utils
+using Traits: CONFIG
 using ExprParsers
 using Markdown
 
@@ -20,9 +21,29 @@ struct RenderInnerFunc{Signature} <: RenderType
   inner::Traits.InternalState.DefInnerFunc
 end
 
-struct TraitsUpdate{Signature}
+struct RenderDoc{Signature}
   deftraitsfunction::Traits.InternalState.DefTraitsFunction{Signature}
   inner::Traits.InternalState.DefInnerFunc
+end
+
+
+"""
+merges the new traits definition (given by `outerfunc` and `innerfunc`) into the given `store` and renders the update
+
+returns ``(newstore, exprs_to_be_evaled)``
+"""
+function merge_and_render_function(
+    env::MacroEnv,
+    store::Traits.InternalState.TraitsStore,
+    outerfunc::Traits.InternalState.DefOuterFunc,
+    innerfunc::Traits.InternalState.DefInnerFunc;
+    doc = true)
+  newstore, func_rendering, doc_rendering = _merge(store, outerfunc, innerfunc)
+  exprs = [render(env, newstore, func_rendering)]
+  if doc && CONFIG.auto_documentation
+    push!(exprs, render_doc(env, store, doc_rendering))
+  end
+  newstore, exprs
 end
 
 
@@ -30,11 +51,11 @@ end
 merge the new traits information into the given traitsstore
 and return whatever needs to be rendered for a correct update of the traits
 """
-function Base.merge(store::Traits.InternalState.TraitsStore, outerfunc::Traits.InternalState.DefOuterFunc, innerfunc::Traits.InternalState.DefInnerFunc)
+function _merge(store::Traits.InternalState.TraitsStore, outerfunc::Traits.InternalState.DefOuterFunc, innerfunc::Traits.InternalState.DefInnerFunc)
   signature = outerfunc.fixed.signature
   # update TraitsStore and return what to render
   store_new = copy(store)
-  torender = if haskey(store, signature)
+  func_rendering = if haskey(store, signature)
     traitsdefinition = store[signature]
     outerfunc_old, innerfuncs = traitsdefinition.outer, traitsdefinition.inners
 
@@ -66,8 +87,8 @@ function Base.merge(store::Traits.InternalState.TraitsStore, outerfunc::Traits.I
     RenderOuterAndInnerFuncs(outerfunc, innerfuncs_new)
   end
   # also return all the information about the state after this merge within an update variable
-  update = TraitsUpdate(store_new[signature], innerfunc)
-  store_new, update, torender
+  doc_rendering = RenderDoc(store_new[signature], innerfunc)
+  store_new, func_rendering, doc_rendering
 end
 
 
@@ -78,7 +99,7 @@ end
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
 
-function render_store_reference(env::MacroEnv, store::Traits.InternalState.TraitsStore)
+function render_store_update(env::MacroEnv, store::Traits.InternalState.TraitsStore)
   name = store.original_function
   if env.mod === name.mod
     # if we are rendering code for the same module, we need to drop the module information
@@ -207,7 +228,7 @@ render documentation
 extra effort needs to be done to properly document the outer function by referring
 to innerfunctions
 """
-function render_doc(env::MacroEnv, store::Traits.InternalState.TraitsStore, torender::TraitsUpdate)
+function render_doc(env::MacroEnv, store::Traits.InternalState.TraitsStore, torender::RenderDoc)
   outerfunc = torender.deftraitsfunction.outer
   innerfuncs = torender.deftraitsfunction.inners
   innerfunc = torender.inner

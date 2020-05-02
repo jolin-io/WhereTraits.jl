@@ -37,24 +37,20 @@ function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Exp
   basefunc, lowerings = lower_args_default(func_parsed)
   basefunc_outer, basefunc_inner = parse_traitsfunction(env, basefunc, expr_original)
 
-  # TODO ? merge the rendering steps into one function hold by Rendering.jl e.g. merge_and_render, merge_and_render_lowering
-  # note that we indeed need to update store
-  store, base_update, base_torender = merge(store, basefunc_outer, basefunc_inner)
-  exprs = Any[
-    render_store_reference(env, store),
-    render(env, store, base_torender),
-  ]
-  if CONFIG.auto_documentation
-    push!(exprs, render_doc(env, store, base_update))
-  end
+  # we need to split merging of the new function into the existing store
+  # and rendering the new updates, as the st
+  store, exprs = merge_and_render_function(env, store, basefunc_outer, basefunc_inner)
 
   for lowering in lowerings
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
     lowered_outer, lowered_inner = parse_traitsfunction(env, lowering, expr_original, on_traits_dropped = msg -> nothing)
-    store, lowered_update, lowered_torender = merge(store, lowered_outer, lowered_inner)
-    push!(exprs, render(env, store, lowered_torender))
+    # we don't document lowerings
+    store, lowered_exprs = merge_and_render_function(env, store, lowered_outer, lowered_inner, doc = false)
+    append!(exprs, lowered_exprs)
   end
-  # finally return nothing in order to not return implementation detail
+  # finally render the new store
+  push!(exprs, render_store_update(env, store))
+  # return nothing in order to not return implementation detail
   flatten_blocks(Expr(:block, exprs..., nothing))
 end
 

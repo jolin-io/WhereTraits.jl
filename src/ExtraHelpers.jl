@@ -5,6 +5,7 @@ using Traits: CONFIG
 using Traits.Utils
 using Traits.Syntax.Rendering
 using Traits.InternalState
+import Traits.Syntax.Rendering: render, RenderOuterFunc, RenderInnerFunc
 using Markdown
 
 """
@@ -55,7 +56,7 @@ function traits_show_implementation(env::MacroEnv, store::Traits.InternalState.T
     push!(exprs, Markdown.parse("Outer function for signature $(outerfunc.fixed.signature)"))
     push!(exprs, Markdown.parse("""
     ```
-    $(render(env, store, Traits.Syntax.Rendering.RenderOuterFunc(outerfunc))))
+    $(render(env, store, RenderOuterFunc(outerfunc))))
     ```
     """))
     push!(exprs, Markdown.parse("\n- - -\n"))
@@ -64,7 +65,7 @@ function traits_show_implementation(env::MacroEnv, store::Traits.InternalState.T
       innerfunc = Traits.InternalState.DefInnerFunc(fixed = fixed, nonfixed = nonfixed)
       push!(exprs, Markdown.parse("""
       ```
-      $(render(env, store, Traits.Syntax.Rendering.RenderInnerFunc(outerfunc, innerfunc)))
+      $(render(env, store, RenderInnerFunc(outerfunc, innerfunc)))
       ```
       """))
       push!(exprs, Markdown.parse("\n- - -\n"))

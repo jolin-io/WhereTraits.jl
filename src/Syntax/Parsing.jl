@@ -103,7 +103,7 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
     body = :nothing
   )
 
-  outerfunc_fixed, innerfunc_fixed = normalize_func(env.mod, outerfunc_parsed)
+  outerfunc_fixed, innerfunc_fixed = normalize_func(env, outerfunc_parsed)
 
   @assert(
     isempty(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))),
@@ -165,8 +165,8 @@ _change_symbols(expr::Expr, symbol_mapping) = Expr(expr.head, _change_symbols(ex
 
 struct _BetweenCurliesAndArgs end
 
-normalize_func(mod, func_expr::Expr) = normalize_func(mod, EP.Function()(func_expr))
-function normalize_func(mod, func_parsed::EP.Function_Parsed)
+normalize_func(env::MacroEnv, func_expr::Expr) = normalize_func(env, EP.Function()(func_expr))
+function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)
   args_parsed = [parse_expr(EP.Arg(), a) for a in func_parsed.args]
   @assert all(arg -> arg.default isa EP.NoDefault, args_parsed) "Can only normalize functions without positional default arguments"
 
@@ -176,7 +176,7 @@ function normalize_func(mod, func_parsed::EP.Function_Parsed)
   typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
     _BetweenCurliesAndArgs, (to_expr(a.type) for a in args_parsed)...)
   typeexpr_full = :($typeexpr where {$(to_expr(func_parsed.wheres)...)})
-  type = Base.eval(mod, typeexpr_full)
+  type = Base.eval(env.mod, typeexpr_full)
   typebase, typevars_old = split_typevar(type)  # typebase == Tuple{P1, P2, P3, ...}
   typeexprs_new, typevars_new, typevar_new_to_old = normalize_typevars(typebase.parameters, typevars_old)
 
