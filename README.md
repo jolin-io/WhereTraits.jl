@@ -38,10 +38,10 @@ help?> h
 
   Original @traits definition:
 
-  function h(a) where eltype(a) <: Number
-      #= none:1 =#
-      true
-  end
+  (h(a) where eltype(a) <: Number) = begin
+          #= none:1 =#
+          true
+      end
 
     •      •      •  
 
@@ -49,10 +49,10 @@ help?> h
 
   Original @traits definition:
 
-  function h(a)
-      #= none:1 =#
-      false
-  end
+  h(a) = begin
+          #= none:1 =#
+          false
+      end
 ```
 
 Last but not least the macro is implemented to support proper pre-compilation as normal.
@@ -104,52 +104,87 @@ After this the macroexpand is simpler to understand
 ```
 which gives the following code
 ```julia
-function var"'__traits__.Main.foo'"()
-  #= /Users/s.sahm/.julia/dev/Traits/src/Syntax/Syntax.jl:291 =#
-  Traits.Syntax.TraitsStore(Traits.Syntax.Reference(Main, true, Symbol("'__traits__.Main.foo'")), Traits.Utils.TypeDict{Tuple{Any,Dict{Any,Any}}}(Tuple{Type,Tuple{Any,Dict{Any,Any}}}[(Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}, ((fixed = (signature = Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}, name = :foo, curlies = Any[], args = ExprParsers.Arg_Parsed[ExprParsers.Arg_Parsed(:a1, :T1, ExprParsers.NoDefault())], wheres = Any[ExprParsers.TypeRange_Parsed(Union{}, :T1, Any)], innerargs_args = Symbol[:a1], innerargs_typevars = Symbol[:T1]), nonfixed = (innerargs_traits = Expr[:(Val{isodd(a1)}())],)), Dict((args_mapping = Dict(:a1 => :a), typevars_mapping = Dict{Symbol,Symbol}(), traits_mapping = Dict(:(Val{isodd(a1)}()) => :(var"'Val{isodd(a1)}()'"::Val{true}))) => (kwargs = Any[], body = quote
-    #= none:1 =#
-    (a + 1) / 2
-  end, expr_original = :(function foo(a) where isodd(a)
-    #= none:1 =#
-    (a + 1) / 2
-  end)))))]))
-end
-
 function foo(a1::T1; kwargs...) where T1
-  #= none:1 =#
-  (Main).var"'__traits__.Main.foo'"(Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}, a1, Traits.Syntax._BetweenArgsAndTypeVars(), T1, Traits.Syntax._BetweenTypeVarsAndTraits(), Val{isodd(a1)}(); kwargs...)
+    #= none:1 =#
+    (Main).foo(
+      Traits.InternalState.TraitsSingleton(),
+      Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any},
+      a1,
+      Traits.Syntax.Rendering._BetweenArgsAndTypeVars(),
+      T1,
+      Traits.Syntax.Rendering._BetweenTypeVarsAndTraits(),
+      Val{isodd(a1)}();
+      kwargs...)
 end
 
-function var"'__traits__.Main.foo'"(::Type{Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}}, a, ::Traits.Syntax._BetweenArgsAndTypeVars, var"'T1'"::Any, ::Traits.Syntax._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})
-  #= none:1 =#
-  (a + 1) / 2
+function foo(::Traits.InternalState.TraitsSingleton,
+             ::Type{Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}},
+             a,
+             ::Traits.Syntax.Rendering._BetweenArgsAndTypeVars,
+             var"'T1'"::Any,
+             ::Traits.Syntax.Rendering._BetweenTypeVarsAndTraits,
+             var"'Val{isodd(a1)}()'"::Val{true})
+    #= none:1 =#
+    (a + 1) / 2
+end
+
+function foo(::Traits.InternalState.TraitsSingleton)
+    #= /Users/s.sahm/.julia/dev/Traits/src/Syntax/Rendering.jl:111 =#
+    Traits.InternalState.TraitsStore(Traits.InternalState.Reference(Main, :foo), Traits.Utils.TypeDict{Traits.InternalState.DefTraitsFunction}(Tuple{Type,Traits.InternalState.DefTraitsFunction}[(Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, Traits.InternalState.DefTraitsFunction{Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}(Traits.InternalState.DefOuterFunc{Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}(Traits.InternalState.DefOuterFuncFixedPart{Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}(Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, :foo, Union{Expr, Symbol}[], ExprParsers.Arg_Parsed[EP.Arg_Parsed(name=:a1, type=:T1, default=ExprParsers.NoDefault())], ExprParsers.TypeRange_Parsed[EP.TypeRange_Parsed(lb=Union{}, name=:T1, ub=Any)], Symbol[:a1], Symbol[:T1]), Traits.InternalState.DefOuterFuncNonFixedPart(Union{Expr, Symbol}[:(Val{isodd(a1)}())])), Dict(Traits.InternalState.DefInnerFuncFixedPart(Dict(:a1 => :a), Dict{Symbol,Symbol}(), Dict{Union{Expr, Symbol},Union{Expr, Symbol}}(:(Val{isodd(a1)}()) => :(var"'Val{isodd(a1)}()'"::Val{true}))) => Traits.InternalState.DefInnerFuncNonFixedPart(Expr[], quote
+#= none:1 =#
+(a + 1) / 2
+end, :((foo(a) where isodd(a)) = begin
+      #= none:1 =#
+      (a + 1) / 2
+  end)))))]))
 end
 nothing
 ```
 It is actually easy to understand on a high level:
-1. The first complex looking function `function var"'__traits__.Main.foo'"()` defines a hidden state which is needed to correctly construct the outer and inner functions required to realize the extended dispatch of `@traits`
 
-2. The second function `function foo(a1::T1; kwargs...) where T1` is just the outer function which corresponds to normal standard user dispatch.
+1. The first function `function foo(a1::T1; kwargs...) where T1` is the so called "outer" function which does all the normal standard Julia dispatch. It is the necessary initial entry point in order to then perform a subsequent call to further dispatch on traits.
 
-  It extracts extra information according to the extended where-syntax and passes it on to the inner function, which is defined last.
+  In the function body you see that this outer function extracts extra information according to the extended where-syntax. Lets go through the arguments one by one
 
-3. The third function is this inner function `function var"'__traits__.Main.foo'"(::Type{Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}}, a, ::Traits.Syntax._BetweenArgsAndTypeVars, var"'T1'"::Any, ::Traits.Syntax._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})`.
+  1. ``Traits.InternalState.TraitsSingleton()`` is a helper type indicating that this is a call to a traits inner function
+  2. ``Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}`` is the complete function signature of the outer function, with an additional helper `_BetweenCurliesAndArgs` to deal with TypeParameters of UnionAll types (whereupon which you can also define function calls and hence ``@traits``)
+  3. ``a1`` is the first actual argument (after this `a2`, `a3` and etc. could follow in principle)
+  4. ``Traits.Syntax.Rendering._BetweenArgsAndTypeVars()`` is again a helper type to distinguish args from typevariables
+  5. ``T1`` is a type parameter (again here `T2`, `T3`, etc. would follow if there are more typeparameters)
+  6. ``Traits.Syntax.Rendering._BetweenTypeVarsAndTraits()`` is another helper, now separating the traits definitions
+  7. ``Val{isodd(a1)}()`` here comes our first actual trait definition (if you define more traits, they would follow here)
+  8. ``; kwargs...`` at last all kwargs are just passed through (dispatch on kwargs is not yet supported)
 
-  It looks a bit more complex again, let me explain the single arguments:
-  1. `::Type{Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}}` dispatches on the signature of the outer function, adding support for types with Type-parameters which is why you see this extra type `Traits.Syntax._BetweenCurliesAndArgs`. If you would have dispatch for say `function MyType{Int, Bool}(a::Any, b::Any)` this would look like `::Type{Tuple{Int, Bool, Traits.Syntax._BetweenCurliesAndArgs,Any, Any}}` respectively
-  2. `a` is just the standard argument
-  3. after this other arguments would follow
+  All these arguments are passed on to the inner function, which is defined next.
+
+2. The second function is this inner function `function foo(::Traits.InternalState.TraitsSingleton, ::Type{Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}}, a, ::Traits.Syntax._BetweenArgsAndTypeVars, var"'T1'"::Any, ::Traits.Syntax._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})`.
+
+  Here we do the actual full traits dispatch, specifying a dispatch type for each of the arguments we just put into the inner functions. Let's again go through each single argument:
+
+  1. `::Traits.InternalState.TraitsSingleton` dispatches on the singleton type to make sure this does not conflict with any other methods defined for this function
+  2. `::Type{Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}}` dispatches on the signature of the outer function, again adding support for types with Type-parameters which is why you see this extra type `Traits.Syntax._BetweenCurliesAndArgs`. If you would have dispatch for say `function MyType{Int, Bool}(a::Any, b::Any)` this would look like `::Type{Tuple{Int, Bool, Traits.Syntax._BetweenCurliesAndArgs,Any, Any}}` respectively
+  3. `a` is just the standard argument, which was of type ``Any``.
+
+    Hereafter, other arguments would follow.
+
   4. `::Traits.Syntax._BetweenArgsAndTypeVars` is again a helper for dispatch separation
-  5. `var"'T1'"::Any` corresponds to the normal standard TypeParameter
+  5. `var"'T1'"::Any` corresponds to the normal standard TypeParameter, here of type Any.
 
     It was renamed into `var"'T1'"`, because it is actually nowhere used in the function body. If you would have used the TypeVariable `T1`, it is named plainly `T1`.
     This was implemented because the syntax actually may have to add extra typeparameters, which then for sure are not used by the code. Hence we distinguish used/unused typeparameters for better debugging/inspecting.
 
-  6. after this other standard type parameters would follow
-  7. `::Traits.Syntax._BetweenTypeVarsAndTraits` again a helper for dispatch separation
-  8. `var"'Val{isodd(a1)}()'"::Val{true})` is our extended where-dispatch for Bool function
+    Hereafter, other standard type parameters would follow.
 
-      You see that the syntax automatically wrapped the function into a `Val` and here we dispatch on `Val{true}`. The name is extra descriptive and refers to the precise function call which happens in the outer function. This is very helpful for debugging and inspecting.
+  6. `::Traits.Syntax._BetweenTypeVarsAndTraits` is the last helper for dispatch separation
+  7. `var"'Val{isodd(a1)}()'"::Val{true})` is our extended where-dispatch for Bool function
+
+      You see that the syntax automatically wrapped the function into a `Val` and here we dispatch on `Val{true}`. The name is extra descriptive and refers to the precise function call which happens in the outer function. This can be helpful for debugging and inspecting.
+
+  8. This function does not define any keyword arguments.
+
+3. The last complex looking function is `function foo(::Traits.InternalState.TraitsSingleton)`. It again uses the `TraitsSingleton` to indicate that this is an internal detail of the traits syntax, however does not take any further arguments. Concretely, it defines the hidden state which is needed to correctly construct the outer and inner functions required to realise the extended dispatch of `@traits`. You don't have to understand it, still you hopefully get the feeling that everything is there.
+
+4. Finally there is `nothing` in order to prevent printing possibly confusing internal details.
 
 If you try `@macroexpand @traits foo(a) where {!isodd(a)} = a/2` instead, you will see that it is very similar, but dispatching on `::Val{false}` instead. This is part of the special support for bool function.
 
@@ -167,6 +202,47 @@ and repeat inspecting
 Also try inspecting methods with other outerfunctions, like ``@macroexpand @traits foo(a, b) = a + b``. You will start appreciating the hidden complexity behind the `@traits` syntax.
 
 While the syntax mapping to an outerfunction and respective innerfunctions feels very intuitive, the needed implementation is surprisingly complicated. Luckily, all this is encapsulated nicely in the `@traits` macro. Enjoy!
+
+------------
+
+If you ever are curious what the whole implementation of your `@traits` function is, there is a helper macro `@traits_show_implementation`.
+For instance if you finally defined
+```julia
+@traits foo(a) where {isodd(a)} = (a+1)/2
+@traits foo(a) where {!isodd(a)} = a/2
+```
+`@traits_show_implementation` will give you the full implementation, omitting the internal state.
+
+```juliarepl
+julia> @traits_show_implementation foo
+  Outer function for signature Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}
+
+  function foo(a1::T1; kwargs...) where T1
+      #= none:1 =#
+      (Main).foo(Traits.InternalState.TraitsSingleton(), Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, a1, Traits.Syntax.Rendering._BetweenArgsAndTypeVars(), T1, Traits.Syntax.Rendering._BetweenTypeVarsAndTraits(), Val{isodd(a1)}(); kwargs...)
+  end)
+
+    •      •      •  
+
+  Inner functions for signature Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}
+
+  function foo(::Traits.InternalState.TraitsSingleton, ::Type{Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::Traits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::Traits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})
+      #= none:1 =#
+      (a + 1) / 2
+  end
+
+    •      •      •  
+
+  function foo(::Traits.InternalState.TraitsSingleton, ::Type{Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::Traits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::Traits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{false})
+      #= none:1 =#
+      a / 2
+  end
+
+    •      •      •  
+
+  ────────────────────────────────────────────────────────────────
+```
+
 
 
 ## Performance + Comparison with [mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)
@@ -223,7 +299,7 @@ julia> @code_native fn(Float16(5))
 For anology with SimpleTraits.jl, this package comes with standard traits definitions
 ``ismutable``, ``isimmutable``, `isiterable`, `iscallable`, `isbitstype`, `isconcretetype`. They mostly just wrap respective standard definitions in ``Base``, with the added benefit, that they behave similarly to `Base.eltype` in that they have the convenience fallback `ismutable(value) = ismutable(typeof(value))`.
 
-You can use these by executing the following
+You can use them by executing the following
 ```julia
 using Traits
 using Traits.BasicTraits
@@ -297,7 +373,7 @@ This is very powerful. Be warned that `IsDef` has limitations currently because 
 Currently the ``@traits`` macro has some known restrictions which are soon to be solved:
 * the extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
 
-    The plan is to fix this by looking up method definitions in the caller module.
+    On possibility would be to fix this by looking up method definitions in the caller module.
 
 * currently **only top-level functions** are directly supported, as the syntax stores and needs information about previous function definitions. An alternative syntax is planned which will support `@traits` on functions within other scopes like functions in functions.
 

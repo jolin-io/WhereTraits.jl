@@ -158,6 +158,7 @@ render innerfunction
 function render(env::MacroEnv, store::Traits.InternalState.TraitsStore, torender::RenderInnerFunc)
   outerfunc, innerfunc = torender.outer, torender.inner
   args = [
+    :(::$(Traits.InternalState.TraitsSingleton));
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
     :(::$(Type{outerfunc.fixed.signature}));
@@ -193,6 +194,7 @@ function render(env::MacroEnv, store::Traits.InternalState.TraitsStore, torender
   outerfunc = torender.outer
 
   innerargs = [
+    Traits.InternalState.traitssingleton;
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
     outerfunc.fixed.signature;
@@ -259,7 +261,10 @@ function render_doc(env::MacroEnv, store::Traits.InternalState.TraitsStore, tore
     # manual doc string of respective inner function
     push!(doc_exprs, :(Traits.Utils.DocsHelper.mygetdoc(
       $(to_expr(store.original_function)),
-      Tuple{Type{$(outerfunc.fixed.signature)}, Type{$(innerfunc_fixed_to_doctype(fixed))}})))
+      Tuple{Traits.InternalState.TraitsSingleton,
+            Type{$(outerfunc.fixed.signature)},
+            Type{$(innerfunc_fixed_to_doctype(fixed))}}
+    )))
     # automatic doc string of inner function definition
     expr_original = Markdown.parse("Original @traits definition:\n```julia\n$(nonfixed.expr_original)\n```")
     push!(doc_exprs, expr_original)
@@ -281,7 +286,9 @@ function render_doc(env::MacroEnv, store::Traits.InternalState.TraitsStore, tore
   quote
     # first the documentation of the inner function as this needs to be updated BEFORE the outer doc-string
     # is updated below
-    Base.@__doc__ function $name(::Type{$(outerfunc.fixed.signature)}, ::Type{$(innerfunc_fixed_to_doctype(innerfunc.fixed))}) end
+    Base.@__doc__ function $name(::$(Traits.InternalState.TraitsSingleton),
+                                 ::Type{$(outerfunc.fixed.signature)},
+                                 ::Type{$(innerfunc_fixed_to_doctype(innerfunc.fixed))}) end
 
     # documentation of outer function (we need to manually ignore nothing docs)
     let docstring = Base.Docs.catdoc(filter(!isnothing, [$(doc_exprs...)])...)
