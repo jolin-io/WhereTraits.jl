@@ -9,7 +9,7 @@ where syntax. Concretely the following are supported:
 f(4) # 2.0
 f(5) # 3.0
 ```
-- dispatch on functions returning Type
+- dispatch on functions returning anything
 ```julia
 @traits g(a) where {Base.IteratorSize(a)::Base.HasShape} = 43
 @traits g(a) = 1
