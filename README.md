@@ -55,8 +55,6 @@ help?> h
       end
 ```
 
-Last but not least the macro is implemented to support proper pre-compilation as normal.
-
 *Warning: While the dispatch works for dynamic functions, it will only be able to create optimal code if your traits function supports proper type-inference. E.g. you can use `Base.isempty`, however type-inference cannot see whether it will return true or false by static inspection. Hence it will use slower dynamic code.*
 
 
