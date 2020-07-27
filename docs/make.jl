@@ -1,8 +1,15 @@
 using WhereTraits
 using Documenter
 
+# The DocTestSetup does not work for our case, quite unsatisfying
+# DocMeta.setdocmeta!(WhereTraits, :DocTestSetup, quote
+#     using WhereTraits
+#     using WhereTraits.BasicTraits
+#     WhereTraits.BasicTraits.@overwrite_Base
+# end, recursive=true)
+
 makedocs(;
-    modules=[WhereTraits],
+    modules=[WhereTraits, WhereTraits.BasicTraits],
     authors="Stephan Sahm <stephan.sahm@gmx.de> and contributors",
     repo="https://github.com/schlichtanders/WhereTraits.jl/blob/{commit}{path}#L{line}",
     sitename="WhereTraits.jl",
@@ -20,6 +27,7 @@ makedocs(;
         ],
         "Library" => "library.md",
     ],
+    doctest = true,  # we haven't been able to get doctest running
 )
 
 deploydocs(;

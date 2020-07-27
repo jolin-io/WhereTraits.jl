@@ -1,5 +1,12 @@
 using WhereTraits
 using Test
+using Documenter
+
+@test isempty(detect_ambiguities(WhereTraits))
+
+@testset "doctest" begin
+  doctest(WhereTraits)
+end
 
 @testset "Utils" begin
   include("utils.jl")

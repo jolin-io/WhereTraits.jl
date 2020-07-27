@@ -1,34 +1,31 @@
-```@meta
-CurrentModule = WhereTraits
-
-DocTestSetup = quote
-    WhereTraits.BasicTraits.@overwrite_Base
-end
-```
-
 # Public API
 
 
 ## WhereTraits
+
+```@meta
+CurrentModule = WhereTraits
+```
+
 ```@docs
 @traits
 @traits_show_implementation
 @traits_test
 ```
 
+
 ## WhereTraits.BasicTraits
 
-```@docs
-WhereTraits.BasicTraits.@overwrite_Base
-WhereTraits.BasicTraits.iscallable
-WhereTraits.BasicTraits.isiterable
-WhereTraits.BasicTraits.isimmutable
-WhereTraits.BasicTraits.ismutable
-WhereTraits.BasicTraits.isconcretetype
-WhereTraits.BasicTraits.isbitstype
+```@meta
+CurrentModule = WhereTraits.BasicTraits
 ```
 
-
-```@meta
-DocTestSetup = nothing
+```@docs
+@overwrite_Base
+iscallable
+isiterable
+isimmutable
+ismutable
+isconcretetype
+isbitstype
 ```

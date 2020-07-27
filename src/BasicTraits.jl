@@ -34,12 +34,13 @@ end
 """
     ismutable(v) -> Bool
 
-Return `true` iff value `v` is mutable.  See [Mutable Composite Types](@ref)
-for a discussion of mutability. Note that this function works on Types instead of values
+Return `true` iff value `v` is mutable.  Note that this function works on Types instead of values
 (oppositely to `Base.isimmutable`). When applied to a value, a default clause will match on its type instead.
 
 # Examples
 ```jldoctest
+julia> using WhereTraits; WhereTraits.BasicTraits.@overwrite_Base
+
 julia> ismutable(1)
 false
 
@@ -58,12 +59,13 @@ ismutable(value) = ismutable(typeof(value))
 """
     isimmutable(v) -> Bool
 
-Return `true` iff value `v` is immutable.  See [Mutable Composite Types](@ref)
-for a discussion of immutability. Note that this function works on Types instead of values
+Return `true` iff value `v` is immutable.  Note that this function works on Types instead of values
 (oppositely to `Base.isimmutable`). When applied to a value, a default clause will match on its type instead.
 
 # Examples
 ```jldoctest
+julia> using WhereTraits; WhereTraits.BasicTraits.@overwrite_Base
+
 julia> isimmutable(1)
 true
 
@@ -93,6 +95,8 @@ For convenience `iscallable(value) = iscallable(typeof(value))`
 
 # Examples
 ```jldoctest
+julia> using WhereTraits; WhereTraits.BasicTraits.@overwrite_Base
+
 julia> iscallable(typeof(+))
 true
 
@@ -121,16 +125,18 @@ iscallable(value) = iscallable(typeof(value))
 Return `true` if type `T` is a "plain data" type,
 meaning it is immutable and contains no references to other values,
 only `primitive` types and other `isbitstype` types.
-Typical examples are numeric types such as [`UInt8`](@ref),
-[`Float64`](@ref), and [`Complex{Float64}`](@ref).
+Typical examples are numeric types such as `UInt8`,
+`Float64`, and `Complex{Float64}`.
 This category of types is significant since they are valid as type parameters,
-may not track [`isdefined`](@ref) / [`isassigned`](@ref) status,
+may not track `isdefined` / `isassigned` status,
 and have a defined layout that is compatible with C.
 
 For convenience `isbitstype(value) = isbitstype(typeof(value))`
 
 # Examples
 ```jldoctest
+julia> using WhereTraits; WhereTraits.BasicTraits.@overwrite_Base
+
 julia> isbitstype(Complex{Float64})
 true
 
@@ -155,6 +161,8 @@ For convenience `isconcretetype(value) = isconcretetype(typeof(value))`
 
 # Examples
 ```jldoctest
+julia> using WhereTraits; WhereTraits.BasicTraits.@overwrite_Base
+
 julia> isconcretetype(Complex)
 false
 

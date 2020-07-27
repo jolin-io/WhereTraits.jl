@@ -2,3 +2,5 @@ Manifest.toml
 .gitignore0
 *~
 *.swp
+docs/build/
+.DS_Store
