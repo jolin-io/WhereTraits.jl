@@ -1,4 +1,4 @@
-using Traits
+using WhereTraits
 using Test
 
 @testset "Utils" begin

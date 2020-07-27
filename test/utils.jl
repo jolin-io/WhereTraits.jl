@@ -1,6 +1,6 @@
 using Test
-using Traits
-using Traits.Utils
+using WhereTraits
+using WhereTraits.Utils
 d = TypeDict(Tuple{Array} => 5, Tuple{Array} => 8)
 
 d[Tuple{Array}] = 98

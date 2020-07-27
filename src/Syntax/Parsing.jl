@@ -2,8 +2,8 @@
 # =============
 module Parsing
 export parse_traitsfunction
-import Traits
-using Traits.Utils
+import WhereTraits
+using WhereTraits.Utils
 using SimpleMatch
 using ExprParsers
 include("NormalizeType.jl")
@@ -122,7 +122,7 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
   traits_filtered = filter(t -> !depends_on(t, dropped_typevars_old), traits)
   if length(traits) != length(traits_filtered)
     traits_dropped = setdiff(traits, traits_filtered)
-    on_traits_dropped("Given traits depend on droppable typeparameters ($dropped_typevars_old). Traits: $traits_dropped")
+    on_traits_dropped("Given traits depend on droppable typeparameters ($dropped_typevars_old). WhereTraits: $traits_dropped")
   end
 
   old_to_new = Dict(v => k for (k, v) in merge(innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping))
@@ -134,17 +134,17 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
                         for (k, v) in zip(traits_normalized, traits_matching_types))
   # we may encounter no traits at all, namely in the case where a default clause is defined
   innerargs_traits = isempty(traits_normalized) ? [] : sortexpr(unique(traits_normalized))
-  outerfunc′ = Traits.InternalState.DefOuterFunc(
+  outerfunc′ = WhereTraits.InternalState.DefOuterFunc(
     outerfunc_fixed,
-    Traits.InternalState.DefOuterFuncNonFixedPart(innerargs_traits),
+    WhereTraits.InternalState.DefOuterFuncNonFixedPart(innerargs_traits),
   )
-  innerfunc′ = Traits.InternalState.DefInnerFunc(
-    Traits.InternalState.DefInnerFuncFixedPart(
+  innerfunc′ = WhereTraits.InternalState.DefInnerFunc(
+    WhereTraits.InternalState.DefInnerFuncFixedPart(
       args_mapping = innerfunc_fixed.args_mapping,
       typevars_mapping = innerfunc_fixed.typevars_mapping,
       traits_mapping = traits_mapping,
     ),
-    Traits.InternalState.DefInnerFuncNonFixedPart(
+    WhereTraits.InternalState.DefInnerFuncNonFixedPart(
       kwargs = func_parsed.kwargs,
       body = func_parsed.body,
       expr_original = expr_original,
@@ -203,7 +203,7 @@ function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)
   # we return the whole signature to easily decide whether the function overwrites another
   # TODO we use call by position
   # TODO because call by keyword leads to UnreachableReached, see https://github.com/JuliaLang/julia/issues/35698
-  outerfunc_fixed = Traits.InternalState.DefOuterFuncFixedPart{type}(
+  outerfunc_fixed = WhereTraits.InternalState.DefOuterFuncFixedPart{type}(
     # everything under fixed should be identifiable via signature
     type,
     func_parsed.name,
@@ -214,7 +214,7 @@ function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)
     sort([a.name for a in args_parsed]),
     sort([tv.name for tv in typevars_new]),
   )
-  # outerfunc_fixed = Traits.InternalState.DefOuterFuncFixedPart{type}(
+  # outerfunc_fixed = WhereTraits.InternalState.DefOuterFuncFixedPart{type}(
   #   # everything under fixed should be identifiable via signature
   #   signature = type,
   #   name = func_parsed.name,

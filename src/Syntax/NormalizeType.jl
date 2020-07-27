@@ -1,7 +1,7 @@
 module NormalizeType
 export normalize_typevars, split_typevar
 
-using Traits.Utils
+using WhereTraits.Utils
 using ExprParsers
 
 const VectorLike = Union{Vector, Tuple, Core.SimpleVector}

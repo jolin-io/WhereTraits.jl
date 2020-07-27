@@ -3,7 +3,7 @@ export lower_args_default
 
 using ExprParsers
 using Setfield
-using Traits.Utils
+using WhereTraits.Utils
 
 
 lower_args_default(expr::Expr) = lower_args_default(parse_expr(EP.Function(), expr))

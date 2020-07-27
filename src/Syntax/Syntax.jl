@@ -2,10 +2,10 @@ module Syntax
 export @traits, @traits_test, @traits_show_implementation
 
 using ExprParsers
-import Traits
-using Traits: CONFIG
-using Traits.Utils
-using Traits.InternalState
+import WhereTraits
+using WhereTraits: CONFIG
+using WhereTraits.Utils
+using WhereTraits.InternalState
 using Suppressor
 include("Lowering.jl")
 using .Lowering
@@ -33,7 +33,7 @@ function _traits(env, expr_expanded::Expr, expr_original::Expr)
 end
 
 function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Expr)
-  store::Traits.InternalState.TraitsStore = getorcreate_traitsstore(env.mod, func_parsed.name)
+  store::WhereTraits.InternalState.TraitsStore = getorcreate_traitsstore(env.mod, func_parsed.name)
   basefunc, lowerings = lower_args_default(func_parsed)
   basefunc_outer, basefunc_inner = parse_traitsfunction(env, basefunc, expr_original)
 

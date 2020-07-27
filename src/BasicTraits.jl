@@ -4,10 +4,10 @@ export ismutable, isimmutable, isiterable, iscallable,
 
 macro overwrite_Base()
   esc(quote
-    using Traits.BasicTraits
-    const isimmutable = Traits.BasicTraits.isimmutable
-    const isbitstype = Traits.BasicTraits.isbitstype
-    const isconcretetype = Traits.BasicTraits.isconcretetype
+    using WhereTraits.BasicTraits
+    const isimmutable = WhereTraits.BasicTraits.isimmutable
+    const isbitstype = WhereTraits.BasicTraits.isbitstype
+    const isconcretetype = WhereTraits.BasicTraits.isconcretetype
     nothing  # empty return
   end)
 end

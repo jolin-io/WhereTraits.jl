@@ -1,11 +1,11 @@
 module ExtraHelpers
 export @traits_test, @traits_show_implementation
-import Traits
-using Traits: CONFIG
-using Traits.Utils
-using Traits.Syntax.Rendering
-using Traits.InternalState
-import Traits.Syntax.Rendering: render, RenderOuterFunc, RenderInnerFunc
+import WhereTraits
+using WhereTraits: CONFIG
+using WhereTraits.Utils
+using WhereTraits.Syntax.Rendering
+using WhereTraits.InternalState
+import WhereTraits.Syntax.Rendering: render, RenderOuterFunc, RenderInnerFunc
 using Markdown
 
 """
@@ -15,7 +15,7 @@ needed because of https://github.com/JuliaLang/julia/issues/34263
 """
 macro traits_test(expr_original)
   expr = macroexpand(__module__, expr_original)
-  expr_traits = Traits.Syntax._traits(@MacroEnv, expr, expr_original)
+  expr_traits = WhereTraits.Syntax._traits(@MacroEnv, expr, expr_original)
   # :(eval($(QuoteNode(...))) is a workaround for @testset, see https://github.com/JuliaLang/julia/issues/34263
   expr_traits = :(eval($(QuoteNode(expr_traits))))
   expr_traits = esc(expr_traits)
@@ -49,7 +49,7 @@ render a whole TraitsStore
 
 for debugging purposes only
 """
-function traits_show_implementation(env::MacroEnv, store::Traits.InternalState.TraitsStore)
+function traits_show_implementation(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore)
   exprs = []
   for deftraitsfunction in values(store)
     outerfunc, innerfuncs = deftraitsfunction.outer, deftraitsfunction.inners
@@ -62,7 +62,7 @@ function traits_show_implementation(env::MacroEnv, store::Traits.InternalState.T
     push!(exprs, Markdown.parse("\n- - -\n"))
     push!(exprs, Markdown.parse("Inner functions for signature $(outerfunc.fixed.signature)"))
     for (fixed, nonfixed) in innerfuncs
-      innerfunc = Traits.InternalState.DefInnerFunc(fixed = fixed, nonfixed = nonfixed)
+      innerfunc = WhereTraits.InternalState.DefInnerFunc(fixed = fixed, nonfixed = nonfixed)
       push!(exprs, Markdown.parse("""
       ```
       $(render(env, store, RenderInnerFunc(outerfunc, innerfunc)))

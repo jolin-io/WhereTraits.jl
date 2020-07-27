@@ -3,7 +3,7 @@
 
 module InternalState
 export getorcreate_traitsstore
-using Traits.Utils
+using WhereTraits.Utils
 using StructEquality
 using ExprParsers
 using ProxyInterface

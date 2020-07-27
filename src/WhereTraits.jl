@@ -1,4 +1,4 @@
-module Traits
+module WhereTraits
 export @traits, @traits_test, @traits_show_implementation
 
 using Compat

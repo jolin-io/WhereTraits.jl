@@ -1,7 +1,7 @@
-name = "Traits"
-uuid = "5060dc80-e054-11e8-0acc-1dc6592f659e"
+name = "WhereTraits"
+uuid = "c9d4e05b-6318-49cb-9b56-e0e2b0ceadd8"
 authors = ["Sahm Stephan <stephan.sahm@gmx.de>"]
-version = "0.5.3"
+version = "1.0.0"
 
 [deps]
 Compat = "34da2185-b29b-5c13-b0c7-acf172513d20"

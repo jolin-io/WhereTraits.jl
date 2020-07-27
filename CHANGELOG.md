@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2020-07-27
+### Added
+- GithubActions for CICD
+- Documentation using Documenter.jl
+- License
+- Codecoverage
+
+### Changed
+- renamed from "Traits.jl" to "WhereTraits.jl"
+
 ## [0.5.3] - 2020-05-04
 ### Fixed
 - bugs in internal dispatch

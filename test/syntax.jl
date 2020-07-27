@@ -1,4 +1,4 @@
-using Traits
+using WhereTraits
 using Test
 
 # Test standard dispatch
@@ -175,12 +175,12 @@ end
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = shape(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 3
-  store1 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
+  store1 = WhereTraits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr1 = @traits_show_implementation ow
 
   # @test length(expr1.args) == 4
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 8
-  store2 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
+  store2 = WhereTraits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr2 = @traits_show_implementation ow
   # @test length(expr2.args) == 4
   @test length(values(store1.definitions)) == length(values(store2.definitions))
@@ -191,7 +191,7 @@ end
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = size(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = nothing
-  store3 = Traits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
+  store3 = WhereTraits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
   expr3 = @traits_show_implementation ow
   @test length(values(store1.definitions)) == length(values(store3.definitions))
   for (def1, def2) in zip(values(store1.definitions), values(store3.definitions))
