@@ -53,27 +53,3 @@ end
 ```
 
 This is very powerful. Be warned that `IsDef` has limitations currently because julia type-inference has limitations. Luckily the type-inference is already very good with concrete-types, which is what we need for dispatch.
-
-
-## Current Restrictions and Future Plans
-
-Currently the `@traits` macro has some known restrictions which are soon to be solved:
-* the extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
-
-    On possibility would be to fix this by looking up method definitions in the caller module.
-
-* currently **only top-level functions** are directly supported, as the syntax stores and needs information about previous function definitions. An alternative syntax is planned which will support `@traits` on functions within other scopes like functions in functions.
-
-    The idea I have is to support a block syntax alternative
-    which assumes that there is no further outer state to take into account, but the block stands on its own. This would still look a bit clumsy, but semantically it is probably the way to go.
-```julia
-function func()
-  @traits begin  # not yet supported
-    function nested(a) where ...
-    end
-    function nested(a) where ...
-    end
-  end
-end
-```
-* The `@traits` currently does not work well within the `Test.@testset` macro. As a workaround WhereTraits.jl exports a `@traits_test` variant which works better, but still has cases where it fails. This needs to be investigated further, and maybe needs a fix on `Test.@testset`, don't know.

@@ -8,8 +8,6 @@ end
 
 # Public API
 
-```@index
-```
 
 ## WhereTraits
 ```@docs
@@ -21,13 +19,13 @@ end
 ## WhereTraits.BasicTraits
 
 ```@docs
-@overwrite_Base
-iscallable
-isiterable
-isimmutable
-ismutable
-isconcretetype
-isbitstype
+WhereTraits.BasicTraits.@overwrite_Base
+WhereTraits.BasicTraits.iscallable
+WhereTraits.BasicTraits.isiterable
+WhereTraits.BasicTraits.isimmutable
+WhereTraits.BasicTraits.ismutable
+WhereTraits.BasicTraits.isconcretetype
+WhereTraits.BasicTraits.isbitstype
 ```
 
 
