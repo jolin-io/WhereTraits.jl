@@ -1,4 +1,4 @@
-<h1> WhereWhereTraits.jl </h1>
+<h1> WhereTraits.jl </h1>
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://schlichtanders.github.io/WhereTraits.jl/stable)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://schlichtanders.github.io/WhereTraits.jl/dev)
@@ -71,7 +71,7 @@ help?> h
   * [Installation & Import](#installation--import)
   * [Implementation Details](#implementation-details)
   * [Performance + Comparison with mauro3/SimpleTraits.jl](#performance--comparison-with-mauro3simpletraitsjl)
-  * [WhereTraits.BasicTraits](#traitsbasictraits)
+  * [WhereTraits.BasicTraits](#wheretraitsbasictraits)
   * [Dispatch on whether functions are defined - using IsDef.jl](#dispatch-on-whether-functions-are-defined---using-isdefjl)
   * [Current Restrictions and Future Plans](#current-restrictions-and-future-plans)
 <!-- TOC END -->
