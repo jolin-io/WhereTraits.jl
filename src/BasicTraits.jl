@@ -6,6 +6,7 @@ macro overwrite_Base()
   esc(quote
     using WhereTraits.BasicTraits
     const isimmutable = WhereTraits.BasicTraits.isimmutable
+    const ismutable = WhereTraits.BasicTraits.ismutable
     const isbitstype = WhereTraits.BasicTraits.isbitstype
     const isconcretetype = WhereTraits.BasicTraits.isconcretetype
     nothing  # empty return
