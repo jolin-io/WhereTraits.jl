@@ -17,7 +17,7 @@ makedocs(;
             "`@traits`" => "manual.md",
             "WhereTraits.BasicTraits" => "basictraits.md",
             "Combination with `isdef`" => "isdef.md",
-        ]
+        ],
         "Library" => "library.md",
     ],
 )
