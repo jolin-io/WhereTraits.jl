@@ -30,7 +30,7 @@ end
 """
 merges the new traits definition (given by `outerfunc` and `innerfunc`) into the given `store` and renders the update
 
-returns ``(newstore, exprs_to_be_evaled)``
+returns `(newstore, exprs_to_be_evaled)`
 """
 function merge_and_render_function(
     env::MacroEnv,
@@ -99,11 +99,12 @@ end
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
 
+# TODO store TraitsStore for each signature independently, i.e. bring TypeDict into the store-function
 function render_store_update(env::MacroEnv, store::Traits.InternalState.TraitsStore)
   name = store.original_function
   if env.mod === name.mod
     # if we are rendering code for the same module, we need to drop the module information
-    # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+    # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
     # for the initial definition
     name = name.name
   end
@@ -145,7 +146,7 @@ end
 
 function _map_args(new_to_old, innerargs)
   map(innerargs) do a
-    # pure ``_`` is currently buggy, see https://github.com/JuliaLang/julia/issues/32727
+    # pure `_` is currently buggy, see https://github.com/JuliaLang/julia/issues/32727
     # hence we use ::Any instead
     get(new_to_old, a, Expr(:(::), Symbol("'", a, "'"), :(Any)))
   end
@@ -169,7 +170,7 @@ function render(env::MacroEnv, store::Traits.InternalState.TraitsStore, torender
     _map_args(innerfunc.fixed.traits_mapping, outerfunc.nonfixed.innerargs_traits);
   ]
   # if we are rendering code for the same module, we need to drop the module information
-  # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+  # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
   # for the initial definition
   name = store.original_function
   if env.mod === name.mod
@@ -275,7 +276,7 @@ function render_doc(env::MacroEnv, store::Traits.InternalState.TraitsStore, tore
   deleteat!(doc_exprs, lastindex(doc_exprs))
 
   # if we are rendering code for the same module, we need to drop the module information
-  # this is needed for defining the function the very first time as ``MyModule.func(...) = ...`` is invalid syntax
+  # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
   # for the initial definition
   name = store.original_function
   if env.mod === name.mod

@@ -26,7 +26,7 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
     EP.Named{:arg}(EP.TypeRange(name=args_names_matcher)),
 
     # TODO we could also allow dispatch on keyword arguments
-    # How? we store all kwargs per signature and then define traitfunctions like ``func(kwargs[:b])``
+    # How? we store all kwargs per signature and then define traitfunctions like `func(kwargs[:b])`
     # EP.Named{:kwarg}(kwargs_names_matcher), # interpreted as bool
     # EP.Named{:kwarg}(EP.TypeAnnotation(name=kwargs_names_matcher)),
     # EP.Named{:kwarg}(EP.TypeRange(name=kwargs_names_matcher)),
@@ -127,7 +127,7 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
 
   old_to_new = Dict(v => k for (k, v) in merge(innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping))
   # TODO we currently do not normalize the traits function names
-  # TODO e.g. using both ``Base.IteratorSize(a)`` and ``IteratorSize(a)`` result in two different traits currently
+  # TODO e.g. using both `Base.IteratorSize(a)` and `IteratorSize(a)` result in two different traits currently
   traits_normalized = _change_symbols(traits_filtered, old_to_new)
   # we map the traitsdefinition to a signature including a name for easier debugging and the correct type
   traits_mapping = Dict(k => Expr(:(::), Symbol("'", k, "'"), v)
@@ -172,7 +172,7 @@ function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)
 
   # normalize types
   # ---------------
-  # we add _BetweenCurliesAndArgs to reuse ``type`` as identifying signature without mixing curly types and arg types
+  # we add _BetweenCurliesAndArgs to reuse `type` as identifying signature without mixing curly types and arg types
   typeexpr = Expr(:curly, Tuple, func_parsed.curlies...,
     _BetweenCurliesAndArgs, (to_expr(a.type) for a in args_parsed)...)
   typeexpr_full = :($typeexpr where {$(to_expr(func_parsed.wheres)...)})

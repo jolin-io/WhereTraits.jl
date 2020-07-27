@@ -30,12 +30,12 @@ isiterable(any) = isiterable(typeof(any))
 """
 this checks whether there are functions defined on a given TYPE
 
-i.e. use it like ``iscallable(typeof(+))``
+i.e. use it like `iscallable(typeof(+))`
 
-for convenience ``iscallable(value) = iscallable(typeof(value))``
+for convenience `iscallable(value) = iscallable(typeof(value))`
 """
 @generated function iscallable(::Type{T}) where T
-  # without ``@generated`` it fails to type infer properly
+  # without `@generated` it fails to type infer properly
   lim = -1
   world = typemax(UInt)
   methods = Base._methods_by_ftype(Tuple{T, Vararg}, lim, world)

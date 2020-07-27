@@ -76,8 +76,8 @@ help?> h
 
 ```julia
 using Pkg
-pkg"registry add https://github.com/JuliaRegistries/General"  # central julia repository
-pkg"registry add https://github.com/schlichtanders/SchlichtandersJuliaRegistry.jl"  # custom repository
+pkg"registry add https://github.com/JuliaRegistries/General"  # central julia registry
+pkg"registry add https://github.com/schlichtanders/SchlichtandersJuliaRegistry.jl"  # custom registry
 pkg"add Traits"
 ```
 
@@ -89,7 +89,7 @@ which makes one macro available `@traits`
 
 ## Implementation Details
 
-The implementations uses only code-rewrite, creating two nested functions out of the one ``@traits`` function.
+The implementations uses only code-rewrite, creating two nested functions out of the one `@traits` function.
 The outer function dispatches as normal, the inner function dispatches on the added traits functionality.
 
 To inspect what is going on it is helpful to turn off the auto_documentation feature by setting
@@ -144,14 +144,14 @@ It is actually easy to understand on a high level:
 
   In the function body you see that this outer function extracts extra information according to the extended where-syntax. Lets go through the arguments one by one
 
-  1. ``Traits.InternalState.TraitsSingleton()`` is a helper type indicating that this is a call to a traits inner function
-  2. ``Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}`` is the complete function signature of the outer function, with an additional helper `_BetweenCurliesAndArgs` to deal with TypeParameters of UnionAll types (whereupon which you can also define function calls and hence ``@traits``)
-  3. ``a1`` is the first actual argument (after this `a2`, `a3` and etc. could follow in principle)
-  4. ``Traits.Syntax.Rendering._BetweenArgsAndTypeVars()`` is again a helper type to distinguish args from typevariables
-  5. ``T1`` is a type parameter (again here `T2`, `T3`, etc. would follow if there are more typeparameters)
-  6. ``Traits.Syntax.Rendering._BetweenTypeVarsAndTraits()`` is another helper, now separating the traits definitions
-  7. ``Val{isodd(a1)}()`` here comes our first actual trait definition (if you define more traits, they would follow here)
-  8. ``; kwargs...`` at last all kwargs are just passed through (dispatch on kwargs is not yet supported)
+  1. `Traits.InternalState.TraitsSingleton()` is a helper type indicating that this is a call to a traits inner function
+  2. `Tuple{Traits.Syntax.Parsing._BetweenCurliesAndArgs,Any}` is the complete function signature of the outer function, with an additional helper `_BetweenCurliesAndArgs` to deal with TypeParameters of UnionAll types (whereupon which you can also define function calls and hence `@traits`)
+  3. `a1` is the first actual argument (after this `a2`, `a3` and etc. could follow in principle)
+  4. `Traits.Syntax.Rendering._BetweenArgsAndTypeVars()` is again a helper type to distinguish args from typevariables
+  5. `T1` is a type parameter (again here `T2`, `T3`, etc. would follow if there are more typeparameters)
+  6. `Traits.Syntax.Rendering._BetweenTypeVarsAndTraits()` is another helper, now separating the traits definitions
+  7. `Val{isodd(a1)}()` here comes our first actual trait definition (if you define more traits, they would follow here)
+  8. `; kwargs...` at last all kwargs are just passed through (dispatch on kwargs is not yet supported)
 
   All these arguments are passed on to the inner function, which is defined next.
 
@@ -161,7 +161,7 @@ It is actually easy to understand on a high level:
 
   1. `::Traits.InternalState.TraitsSingleton` dispatches on the singleton type to make sure this does not conflict with any other methods defined for this function
   2. `::Type{Tuple{Traits.Syntax._BetweenCurliesAndArgs,Any}}` dispatches on the signature of the outer function, again adding support for types with Type-parameters which is why you see this extra type `Traits.Syntax._BetweenCurliesAndArgs`. If you would have dispatch for say `function MyType{Int, Bool}(a::Any, b::Any)` this would look like `::Type{Tuple{Int, Bool, Traits.Syntax._BetweenCurliesAndArgs,Any, Any}}` respectively
-  3. `a` is just the standard argument, which was of type ``Any``.
+  3. `a` is just the standard argument, which was of type `Any`.
 
     Hereafter, other arguments would follow.
 
@@ -186,7 +186,7 @@ It is actually easy to understand on a high level:
 
 If you try `@macroexpand @traits foo(a) where {!isodd(a)} = a/2` instead, you will see that it is very similar, but dispatching on `::Val{false}` instead. This is part of the special support for bool function.
 
-Also try ``@macroexpand @traits foo(a) where {iseven(a)} = a/2`` and see what the syntax does differently.
+Also try `@macroexpand @traits foo(a) where {iseven(a)} = a/2` and see what the syntax does differently.
 
 -----------
 
@@ -195,9 +195,9 @@ Now execute
 @traits foo(a) where {isodd(a)} = (a+1)/2
 ```
 and repeat inspecting
-`@macroexpand @traits foo(a) where {!isodd(a)} = a/2` vs ``@macroexpand @traits foo(a) where {iseven(a)} = a/2``.
+`@macroexpand @traits foo(a) where {!isodd(a)} = a/2` vs `@macroexpand @traits foo(a) where {iseven(a)} = a/2`.
 
-Also try inspecting methods with other outerfunctions, like ``@macroexpand @traits foo(a, b) = a + b``. You will start appreciating the hidden complexity behind the `@traits` syntax.
+Also try inspecting methods with other outerfunctions, like `@macroexpand @traits foo(a, b) = a + b`. You will start appreciating the hidden complexity behind the `@traits` syntax.
 
 While the syntax mapping to an outerfunction and respective innerfunctions feels very intuitive, the needed implementation is surprisingly complicated. Luckily, all this is encapsulated nicely in the `@traits` macro. Enjoy!
 
@@ -245,10 +245,10 @@ julia> @traits_show_implementation foo
 
 ## Performance + Comparison with [mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)
 
-For a high-level comparison between ``Traits.@traits`` and ``SimpleTraits.jl`` see the respective [discourse discussion](https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5?u=schlichtanders).
+For a high-level comparison between `Traits.@traits` and `SimpleTraits.jl` see the respective [discourse discussion](https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5?u=schlichtanders).
 
 The following examples mirror https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch.
-We start with defining a custom function ``fn``, a custom Trait function ``isTr`` and some methods for ``fn`` dispatching on the trait.
+We start with defining a custom function `fn`, a custom Trait function `isTr` and some methods for `fn` dispatching on the trait.
 ```julia
 isTr(_) = false
 
@@ -295,7 +295,7 @@ julia> @code_native fn(Float16(5))
 ## Traits.BasicTraits
 
 For anology with SimpleTraits.jl, this package comes with standard traits definitions
-``ismutable``, ``isimmutable``, `isiterable`, `iscallable`, `isbitstype`, `isconcretetype`. They mostly just wrap respective standard definitions in ``Base``, with the added benefit, that they behave similarly to `Base.eltype` in that they have the convenience fallback `ismutable(value) = ismutable(typeof(value))`.
+`ismutable`, `isimmutable`, `isiterable`, `iscallable`, `isbitstype`, `isconcretetype`. They mostly just wrap respective standard definitions in `Base`, with the added benefit, that they behave similarly to `Base.eltype` in that they have the convenience fallback `ismutable(value) = ismutable(typeof(value))`.
 
 You can use them by executing the following
 ```julia
@@ -317,7 +317,7 @@ You want to dispatch on whether a function is defined or not? I guess this is a 
 
 [IsDef.jl](https://github.com/schlichtanders/IsDef.jl) exports two functions `isdef` and `Out` with which you can dispatch on whether functions are defined or not.
 ([IsDef.jl](https://github.com/schlichtanders/IsDef.jl) is a sub-dependency of Traits.jl, so you should already have it installed).
-With `IsDef.isdef`/`IsDef.Out` and ``Traits.@traits`` we can define typesafe dispatch like follows:
+With `IsDef.isdef`/`IsDef.Out` and `Traits.@traits` we can define typesafe dispatch like follows:
 
 ```julia
 using Traits
@@ -368,7 +368,7 @@ This is very powerful. Be warned that `IsDef` has limitations currently because 
 
 ## Current Restrictions and Future Plans
 
-Currently the ``@traits`` macro has some known restrictions which are soon to be solved:
+Currently the `@traits` macro has some known restrictions which are soon to be solved:
 * the extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
 
     On possibility would be to fix this by looking up method definitions in the caller module.
@@ -387,4 +387,4 @@ function func()
   end
 end
 ```
-* The ``@traits`` currently does not work well within the `Test.@testset` macro. As a workaround Traits.jl exports a `@traits_test` variant which works better, but still has cases where it fails. This needs to be investigated further, and maybe needs a fix on ``Test.@testset``, don't know.
+* The `@traits` currently does not work well within the `Test.@testset` macro. As a workaround Traits.jl exports a `@traits_test` variant which works better, but still has cases where it fails. This needs to be investigated further, and maybe needs a fix on `Test.@testset`, don't know.

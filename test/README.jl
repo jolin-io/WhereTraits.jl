@@ -3,6 +3,7 @@ using Test
 
 using Suppressor
 using StringDistances  # TODO make this a submodule for test only
+using InteractiveUtils
 
 # Test README.md example
 # ======================

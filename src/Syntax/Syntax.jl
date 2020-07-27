@@ -55,7 +55,7 @@ function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Exp
 end
 
 function _traits_parsed(env, parsed, expr_original)
-  throw(ArgumentError("@traits macro expects function expression, got ``$expr_original``"))
+  throw(ArgumentError("@traits macro expects function expression, got `$expr_original`"))
 end
 
 # # TODO should we Deprecate this syntax?

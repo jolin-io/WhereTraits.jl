@@ -163,7 +163,7 @@ _collect_union_types(type::Union) = [type.a; _collect_union_types(type.b)]
 
 
 function _normalize_typevars(type::DataType, typevar_context, typevar_old_to_new!, countfrom!, ::False)
-  # if tuple_parents_only == False, ``type`` cannot be a Vararg, as Varargs are only allowed in Tuples
+  # if tuple_parents_only == False, `type` cannot be a Vararg, as Varargs are only allowed in Tuples
   if isempty(type.parameters)  # concrete DataType without typeparameters
     type, []
   else

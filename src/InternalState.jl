@@ -74,7 +74,7 @@ returns (original module, TraitsStore)
 function getorcreate_traitsstore(mod, funcname)
   mod_original, funcname_original = normalize_mod_and_name(mod, funcname)
   traitsstore = try
-    # call with special ``traitsstate`` argument to get the store
+    # call with special `traitsstate` argument to get the store
     getproperty(mod_original, funcname_original)(traitssingleton)
   catch e
     e isa Union{UndefVarError, MethodError} || rethrow()

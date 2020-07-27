@@ -238,13 +238,13 @@ end
 # TODO add case for diagonal dispatch `f(a::T, b::T) where T`
 # TODO add case for arg without name
 
-# TODO add case for function in submodule like ``@traits_test mysubmodule.myfunc(a) = 4``
-# TODO add case for overwriting same target function from different modules like ``@traits Target.myfunc(...)`` from
+# TODO add case for function in submodule like `@traits_test mysubmodule.myfunc(a) = 4`
+# TODO add case for overwriting same target function from different modules like `@traits Target.myfunc(...)` from
 # both module A and module B
 
-# TODO test that ``@traits f(a, b)`` indeed inserts two where variables T1 and T2
+# TODO test that `@traits f(a, b)` indeed inserts two where variables T1 and T2
 
 
 # TODO test that traits are normalized correctly
 # TODO we currently do not normalize the traits function names
-# TODO e.g. using both ``Base.IteratorSize(a)`` and ``IteratorSize(a)`` should result in the same trait, but don't do currently
+# TODO e.g. using both `Base.IteratorSize(a)` and `IteratorSize(a)` should result in the same trait, but don't do currently
