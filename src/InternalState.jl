@@ -6,7 +6,7 @@ export getorcreate_traitsstore
 using WhereTraits.Utils
 using StructEquality
 using ExprParsers
-using ProxyInterface
+using ProxyInterfaces
 
 @def_structequal Base.@kwdef struct DefOuterFuncFixedPart{Signature}
     # everything under fixed should be identifiable via signature
@@ -62,9 +62,9 @@ ExprParsers.to_expr(r::Reference) = :($(r.mod).$(r.name))
 end
 TraitsStore(original_function::Reference) = TraitsStore(original_function, TypeDict{DefTraitsFunction}())
 
-ProxyInterface.dict(store::TraitsStore) = store.definitions
-ProxyInterface.dict(Store::Type{TraitsStore}) = TypeDict{DefTraitsFunction}
-ProxyInterface.@dict_mutable TraitsStore
+ProxyInterfaces.dict(store::TraitsStore) = store.definitions
+ProxyInterfaces.dict(Store::Type{TraitsStore}) = TypeDict{DefTraitsFunction}
+ProxyInterfaces.@dict_mutable TraitsStore
 Base.copy(store::TraitsStore) = TraitsStore(store.original_function, copy(store.definitions))
 
 
