@@ -19,6 +19,9 @@ Compat = "2.1, 3"
 Setfield = "0.7"
 Suppressor = "0.2"
 ProxyInterfaces = "1.0"
+DataTypesBasic = "1.0"
+SimpleMatch = "1.0"
+StructEquality = "1.0"
 julia = "1"
 
 [extras]
