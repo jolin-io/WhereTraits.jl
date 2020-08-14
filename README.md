@@ -39,10 +39,9 @@ For more details, take a look at the [documentation](https://schlichtanders.gith
 
 ## Installation & Import
 
+Install by running
 ```julia
 using Pkg
-pkg"registry add https://github.com/JuliaRegistries/General"  # central julia registry
-pkg"registry add https://github.com/schlichtanders/SchlichtandersJuliaRegistry.jl"  # custom registry
 pkg"add WhereTraits"
 ```
 

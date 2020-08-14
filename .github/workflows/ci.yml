@@ -34,13 +34,6 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
-      - run: |
-          julia -e '
-            using Pkg
-            pkg"registry add https://github.com/JuliaRegistries/General"  # central julia registry
-            pkg"registry add https://github.com/schlichtanders/SchlichtandersJuliaRegistry.jl"  # custom registry
-            '
-        shell: bash
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
       - uses: julia-actions/julia-processcoverage@v1
@@ -55,13 +48,6 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1'
-      - run: |
-          julia -e '
-            using Pkg
-            pkg"registry add https://github.com/JuliaRegistries/General"  # central julia registry
-            pkg"registry add https://github.com/schlichtanders/SchlichtandersJuliaRegistry.jl"  # custom registry
-            '
-        shell: bash
       - run: |
           julia --project=docs -e '
             using Pkg
