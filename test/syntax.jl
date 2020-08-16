@@ -3,7 +3,7 @@ using Test
 
 # Test standard dispatch
 # ======================
-@macroexpand @traits g(a) = a
+  @macroexpand @traits g(a) = a
 
 @testset "standard dispatch" begin
   # s === standard
@@ -175,27 +175,27 @@ end
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = shape(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 3
-  store1 = WhereTraits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
+  state1 = @traits_get_state ow
   expr1 = @traits_show_implementation ow
 
   # @test length(expr1.args) == 4
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 8
-  store2 = WhereTraits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
+  state2 = @traits_get_state ow
   expr2 = @traits_show_implementation ow
-  # @test length(expr2.args) == 4
-  @test length(values(store1.definitions)) == length(values(store2.definitions))
-  for (def1, def2) in zip(values(store1.definitions), values(store2.definitions))
-    @test length(def1.inners) == length(def2.inners)
+
+  @test length(state1) == length(state2)
+  for (store1, store2) in zip(state1, state2)
+    @test length(store1.definitions.inners) == length(store2.definitions.inners)
   end
 
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = size(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = nothing
-  store3 = WhereTraits.Syntax.getorcreate_traitsstore(@__MODULE__, :ow)
+  state3 = @traits_get_state ow
   expr3 = @traits_show_implementation ow
-  @test length(values(store1.definitions)) == length(values(store3.definitions))
-  for (def1, def2) in zip(values(store1.definitions), values(store3.definitions))
-    @test length(def1.inners) == length(def2.inners)
+  @test length(state1) == length(state3)
+  for (store1, store3) in zip(state1, state3)
+    @test length(store1.definitions.inners) == length(store3.definitions.inners)
   end
 end
 

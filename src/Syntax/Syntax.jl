@@ -1,5 +1,5 @@
 module Syntax
-export @traits, @traits_test, @traits_show_implementation
+export @traits, @traits_show_implementation
 
 using ExprParsers
 import WhereTraits
@@ -33,23 +33,18 @@ function _traits(env, expr_expanded::Expr, expr_original::Expr)
 end
 
 function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Expr)
-  store::WhereTraits.InternalState.TraitsStore = getorcreate_traitsstore(env.mod, func_parsed.name)
   basefunc, lowerings = lower_args_default(func_parsed)
-  basefunc_outer, basefunc_inner = parse_traitsfunction(env, basefunc, expr_original)
 
-  # we need to split merging of the new function into the existing store
-  # and rendering the new updates, as the st
-  store, exprs = merge_and_render_function(env, store, basefunc_outer, basefunc_inner)
+  basefunc_outer, basefunc_inner = parse_traitsfunction(env, basefunc, expr_original)
+  exprs = merge_and_render_update(env, basefunc_outer, basefunc_inner, doc = true)
 
   for lowering in lowerings
     # As lowering dropped variables, also traits may need to be dropped. Do this silently.
     lowered_outer, lowered_inner = parse_traitsfunction(env, lowering, expr_original, on_traits_dropped = msg -> nothing)
     # we don't document lowerings
-    store, lowered_exprs = merge_and_render_function(env, store, lowered_outer, lowered_inner, doc = false)
+    lowered_exprs = merge_and_render_update(env, lowered_outer, lowered_inner, doc = false)
     append!(exprs, lowered_exprs)
   end
-  # finally render the new store
-  push!(exprs, render_store_update(env, store))
   # return nothing in order to not return implementation detail
   flatten_blocks(Expr(:block, exprs..., nothing))
 end
@@ -58,16 +53,4 @@ function _traits_parsed(env, parsed, expr_original)
   throw(ArgumentError("@traits macro expects function expression, got `$expr_original`"))
 end
 
-# # TODO should we Deprecate this syntax?
-# function _traits(mod, block_parsed::EP.Block_Parsed)
-#   # @traits on block doesn't use any global state
-#   store = TraitsStore()
-#   parser = EP.AnyOf(EP.Function(), EP.anything)
-#   funcs = [p for p in [parser(a) for a in block_parsed.exprs] if p isa EP.Function]
-#   for f in funcs
-#     outerfunc, innerfunc = parse_traitsfunction(mod, f)
-#     merge!(store, outerfunc, innerfunc)
-#   end
-#   render(store)
-# end
 end # module

@@ -2,7 +2,6 @@ module Utils
 export iftrue, next!, filtersplit, depends_on,
   normalize_mod_and_name, unique_funcname,
   flatten_blocks, MacroEnv, @MacroEnv, Dict_to_normalizedType,
-  TypeDict,
   SortExpr, sortexpr,
   @doc_signature, isnodocumentationfound
 
@@ -74,7 +73,6 @@ end
 
 
 include("exprparsers.jl")
-include("TypeDict.jl")
 include("SortExpr.jl")
 include("DocsHelper.jl")
 using .DocsHelper

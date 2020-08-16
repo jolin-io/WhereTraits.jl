@@ -1,93 +1,117 @@
 module Rendering
-export merge_and_render_function, render_store_update
+export merge_and_render_update
 import WhereTraits
-using WhereTraits.Utils
 using WhereTraits: CONFIG
+using WhereTraits.Utils
+using WhereTraits.InternalState
+
 using ExprParsers
 using Markdown
+using Setfield
 
 abstract type RenderType end
 struct RenderOuterFunc{Signature} <: RenderType
-  outer::WhereTraits.InternalState.DefOuterFunc{Signature}
+  outer::InternalState.DefOuterFunc{Signature}
 end
 struct RenderOuterAndInnerFuncs{Signature} <: RenderType
-  outer::WhereTraits.InternalState.DefOuterFunc{Signature}
-  inners::WhereTraits.InternalState.InnerFuncs
+  outer::InternalState.DefOuterFunc{Signature}
+  inners::InternalState.InnerFuncs
 end
 struct RenderInnerFunc{Signature} <: RenderType
   # we need the outerfunc to construct the innerfunc, as it depends on the ordering of the traits functions
   # which are defined in the outerfunc
-  outer::WhereTraits.InternalState.DefOuterFunc{Signature}
-  inner::WhereTraits.InternalState.DefInnerFunc
+  outer::InternalState.DefOuterFunc{Signature}
+  inner::InternalState.DefInnerFunc
 end
 
 struct RenderDoc{Signature}
-  deftraitsfunction::WhereTraits.InternalState.DefTraitsFunction{Signature}
-  inner::WhereTraits.InternalState.DefInnerFunc
+  deftraitsfunction::InternalState.DefTraitsFunction{Signature}
+  inner::InternalState.DefInnerFunc
 end
 
 
 """
-merges the new traits definition (given by `outerfunc` and `innerfunc`) into the given `store` and renders the update
+    merge_and_render_update(env::MacroEnv, outfunc, innerfunc; [doc = true])
 
-returns `(newstore, exprs_to_be_evaled)`
+Merges the new traits definition (given by `outerfunc` and `innerfunc`) and renders the update.
+
+Returns a list of Base.Expr which can be evaled or returned in macro.
 """
-function merge_and_render_function(
+function merge_and_render_update(
     env::MacroEnv,
-    store::WhereTraits.InternalState.TraitsStore,
-    outerfunc::WhereTraits.InternalState.DefOuterFunc,
-    innerfunc::WhereTraits.InternalState.DefInnerFunc;
+    outerfunc::InternalState.DefOuterFunc,
+    innerfunc::InternalState.DefInnerFunc;
     doc = true)
-  newstore, func_rendering, doc_rendering = _merge(store, outerfunc, innerfunc)
-  exprs = [render(env, newstore, func_rendering)]
+
+  store = get_traitsstore(env.mod, outerfunc.fixed.name, outerfunc.fixed.signature)
+  store_new, func_rendering, doc_rendering = _merge(env, store, outerfunc, innerfunc)
+
+  exprs = [render(env, store_new, func_rendering)]
   if doc && CONFIG.auto_documentation
-    push!(exprs, render_doc(env, store, doc_rendering))
+    push!(exprs, render_doc(env, store_new, doc_rendering))
   end
-  newstore, exprs
+  push!(exprs, render_store_update(env, store_new))
+  exprs
 end
 
+function render_store_update(env::MacroEnv, store::InternalState.TraitsStore)
+  name = store.original_function
+  if env.mod === name.mod
+    # if we are rendering code for the same module, we need to drop the module information
+    # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
+    # for the initial definition
+    name = name.name
+  end
+  :(function $(to_expr(name))(::WhereTraits.InternalState.TraitsStoreSingleton, ::Type{$(store.definitions.outer.fixed.signature)})
+    $store
+  end)
+end
 
 """
 merge the new traits information into the given traitsstore
 and return whatever needs to be rendered for a correct update of the traits
 """
-function _merge(store::WhereTraits.InternalState.TraitsStore, outerfunc::WhereTraits.InternalState.DefOuterFunc, innerfunc::WhereTraits.InternalState.DefInnerFunc)
+function _merge(env::MacroEnv,
+                store::Union{Nothing, InternalState.TraitsStore},
+                outerfunc::InternalState.DefOuterFunc,
+                innerfunc::InternalState.DefInnerFunc)
   signature = outerfunc.fixed.signature
-  # update TraitsStore and return what to render
-  store_new = copy(store)
-  func_rendering = if haskey(store, signature)
-    traitsdefinition = store[signature]
-    outerfunc_old, innerfuncs = traitsdefinition.outer, traitsdefinition.inners
+  if isnothing(store)
+    mod_original, funcname_original = normalize_mod_and_name(env.mod, outerfunc.fixed.name)
+    innerfuncs_new = InternalState.InnerFuncs(innerfunc.fixed => innerfunc.nonfixed)
+    store_new = InternalState.TraitsStore(
+      original_function = InternalState.Reference(mod_original, funcname_original),
+      definitions = InternalState.DefTraitsFunction(outerfunc, innerfuncs_new)
+    )
+    func_rendering = RenderOuterAndInnerFuncs(outerfunc, innerfuncs_new)
+
+  else
+    outerfunc_old, innerfuncs = store.definitions.outer, store.definitions.inners
 
     innerfuncs_new = copy(innerfuncs)
     innerfuncs_new[innerfunc.fixed] = innerfunc.nonfixed
 
-    outerfunc_new_nonfixed = WhereTraits.InternalState.DefOuterFuncNonFixedPart(
+    outerfunc_new_nonfixed = InternalState.DefOuterFuncNonFixedPart(
       # we aggregate all unique traits and ensure order
       innerargs_traits = sortexpr(unique([outerfunc_old.nonfixed.innerargs_traits; outerfunc.nonfixed.innerargs_traits])),
     )
 
     if outerfunc_old.nonfixed == outerfunc_new_nonfixed  # if same WhereTraits, only the inner function needs to be rendered
-      store_new[signature] = WhereTraits.InternalState.DefTraitsFunction(outerfunc_old, innerfuncs_new)
-      RenderInnerFunc(outerfunc_old, innerfunc)
+      store_new = @set store.definitions = InternalState.DefTraitsFunction(outerfunc_old, innerfuncs_new)
+      func_rendering = RenderInnerFunc(outerfunc_old, innerfunc)
     else
-      outerfunc_new = WhereTraits.InternalState.DefOuterFunc(
+      outerfunc_new = InternalState.DefOuterFunc(
         # outerfunc.fixed == outerfunc_old.fixed, because of same signature
         fixed = outerfunc_old.fixed,
         nonfixed = outerfunc_new_nonfixed,
       )
-      store_new[signature] = WhereTraits.InternalState.DefTraitsFunction(outerfunc_new, innerfuncs_new)
-      RenderOuterAndInnerFuncs(outerfunc_new, innerfuncs_new)
+      store_new = @set store.definitions = InternalState.DefTraitsFunction(outerfunc_new, innerfuncs_new)
+      func_rendering = RenderOuterAndInnerFuncs(outerfunc_new, innerfuncs_new)
     end
-  else
-    # initial case
-    innerfuncs_new = WhereTraits.InternalState.InnerFuncs()
-    innerfuncs_new[innerfunc.fixed] = innerfunc.nonfixed
-    store_new[signature] = WhereTraits.InternalState.DefTraitsFunction(outerfunc, innerfuncs_new)
-    RenderOuterAndInnerFuncs(outerfunc, innerfuncs_new)
   end
+
   # also return all the information about the state after this merge within an update variable
-  doc_rendering = RenderDoc(store_new[signature], innerfunc)
+  doc_rendering = RenderDoc(store_new.definitions, innerfunc)
   store_new, func_rendering, doc_rendering
 end
 
@@ -99,26 +123,13 @@ end
 struct _BetweenTypeVarsAndTraits end
 struct _BetweenArgsAndTypeVars end
 
-# TODO store TraitsStore for each signature independently, i.e. bring TypeDict into the store-function
-function render_store_update(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore)
-  name = store.original_function
-  if env.mod === name.mod
-    # if we are rendering code for the same module, we need to drop the module information
-    # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
-    # for the initial definition
-    name = name.name
-  end
-  :(function $(to_expr(name))(::WhereTraits.InternalState.TraitsSingleton)
-    $store
-  end)
-end
 
 """
 render a whole TraitsStore
 
 for debugging purposes only
 """
-function render(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore)
+function render(env::MacroEnv, store::InternalState.TraitsStore)
   exprs = []
   for (outerfunc, innerfuncs) in values(store)
     push!(exprs, render(env, store, RenderOuterFunc(outerfunc)))
@@ -133,12 +144,12 @@ end
 """
 rerender one single outerfunc and respective innerfuncs
 """
-function render(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore, torender::RenderOuterAndInnerFuncs)
+function render(env::MacroEnv, store::InternalState.TraitsStore, torender::RenderOuterAndInnerFuncs)
   outerfunc, innerfuncs = torender.outer, torender.inners
   exprs = []
   push!(exprs, render(env, store, RenderOuterFunc(outerfunc)))
   for (fixed, nonfixed) in innerfuncs
-    innerfunc = WhereTraits.InternalState.DefInnerFunc(fixed = fixed, nonfixed = nonfixed)
+    innerfunc = InternalState.DefInnerFunc(fixed = fixed, nonfixed = nonfixed)
     push!(exprs, render(env, store, RenderInnerFunc(outerfunc, innerfunc)))
   end
   flatten_blocks(Expr(:block, exprs...))
@@ -156,10 +167,10 @@ end
 render innerfunction
 (this is only possible with informations from outerfunc)
 """
-function render(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore, torender::RenderInnerFunc)
+function render(env::MacroEnv, store::InternalState.TraitsStore, torender::RenderInnerFunc)
   outerfunc, innerfunc = torender.outer, torender.inner
   args = [
-    :(::$(WhereTraits.InternalState.TraitsSingleton));
+    :(::$(InternalState.TraitsDefSingleton));
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
     :(::$(Type{outerfunc.fixed.signature}));
@@ -191,11 +202,11 @@ end
 """
 render outer function
 """
-function render(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore, torender::RenderOuterFunc)
+function render(env::MacroEnv, store::InternalState.TraitsStore, torender::RenderOuterFunc)
   outerfunc = torender.outer
 
   innerargs = [
-    WhereTraits.InternalState.traitssingleton;
+    InternalState.traitsdefsingleton;
     # we need to dispatch on the signature so that different outerfuncs don't
     # overwrite each other's innerfunc
     outerfunc.fixed.signature;
@@ -231,7 +242,7 @@ render documentation
 extra effort needs to be done to properly document the outer function by referring
 to innerfunctions
 """
-function render_doc(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore, torender::RenderDoc)
+function render_doc(env::MacroEnv, store::InternalState.TraitsStore, torender::RenderDoc)
   outerfunc = torender.deftraitsfunction.outer
   innerfuncs = torender.deftraitsfunction.inners
   innerfunc = torender.inner
@@ -262,7 +273,7 @@ function render_doc(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore,
     # manual doc string of respective inner function
     push!(doc_exprs, :(WhereTraits.Utils.DocsHelper.mygetdoc(
       $(to_expr(store.original_function)),
-      Tuple{WhereTraits.InternalState.TraitsSingleton,
+      Tuple{WhereTraits.InternalState.TraitsDocSingleton,
             Type{$(outerfunc.fixed.signature)},
             Type{$(innerfunc_fixed_to_doctype(fixed))}}
     )))
@@ -287,7 +298,7 @@ function render_doc(env::MacroEnv, store::WhereTraits.InternalState.TraitsStore,
   quote
     # first the documentation of the inner function as this needs to be updated BEFORE the outer doc-string
     # is updated below
-    Base.@__doc__ function $name(::$(WhereTraits.InternalState.TraitsSingleton),
+    Base.@__doc__ function $name(::$(InternalState.TraitsDocSingleton),
                                  ::Type{$(outerfunc.fixed.signature)},
                                  ::Type{$(innerfunc_fixed_to_doctype(innerfunc.fixed))}) end
 

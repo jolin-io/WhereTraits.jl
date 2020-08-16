@@ -100,7 +100,7 @@ which gives the following code
 function foo(a1::T1; kwargs...) where T1
     #= none:1 =#
     (Main).foo(
-      WhereTraits.InternalState.TraitsSingleton(),
+      WhereTraits.InternalState.TraitsDefSingleton(),
       Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any},
       a1,
       WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars(),
@@ -110,7 +110,7 @@ function foo(a1::T1; kwargs...) where T1
       kwargs...)
 end
 
-function foo(::WhereTraits.InternalState.TraitsSingleton,
+function foo(::WhereTraits.InternalState.TraitsDefSingleton,
              ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}},
              a,
              ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars,
@@ -121,7 +121,7 @@ function foo(::WhereTraits.InternalState.TraitsSingleton,
     (a + 1) / 2
 end
 
-function foo(::WhereTraits.InternalState.TraitsSingleton)
+function foo(::WhereTraits.InternalState.TraitsDefSingleton)
     #= /Users/s.sahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:111 =#
     WhereTraits.InternalState.TraitsStore(WhereTraits.InternalState.Reference(Main, :foo), WhereTraits.Utils.TypeDict{WhereTraits.InternalState.DefTraitsFunction}(Tuple{Type,WhereTraits.InternalState.DefTraitsFunction}[(Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, WhereTraits.InternalState.DefTraitsFunction{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}(WhereTraits.InternalState.DefOuterFunc{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}(WhereTraits.InternalState.DefOuterFuncFixedPart{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}(Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, :foo, Union{Expr, Symbol}[], ExprParsers.Arg_Parsed[EP.Arg_Parsed(name=:a1, type=:T1, default=ExprParsers.NoDefault())], ExprParsers.TypeRange_Parsed[EP.TypeRange_Parsed(lb=Union{}, name=:T1, ub=Any)], Symbol[:a1], Symbol[:T1]), WhereTraits.InternalState.DefOuterFuncNonFixedPart(Union{Expr, Symbol}[:(Val{isodd(a1)}())])), Dict(WhereTraits.InternalState.DefInnerFuncFixedPart(Dict(:a1 => :a), Dict{Symbol,Symbol}(), Dict{Union{Expr, Symbol},Union{Expr, Symbol}}(:(Val{isodd(a1)}()) => :(var"'Val{isodd(a1)}()'"::Val{true}))) => WhereTraits.InternalState.DefInnerFuncNonFixedPart(Expr[], quote
 #= none:1 =#
@@ -139,7 +139,7 @@ It is actually easy to understand on a high level:
 
   In the function body you see that this outer function extracts extra information according to the extended where-syntax. Lets go through the arguments one by one
 
-  1. `WhereTraits.InternalState.TraitsSingleton()` is a helper type indicating that this is a call to a traits inner function
+  1. `WhereTraits.InternalState.TraitsDefSingleton()` is a helper type indicating that this is a call to a traits inner function
   2. `Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}` is the complete function signature of the outer function, with an additional helper `_BetweenCurliesAndArgs` to deal with TypeParameters of UnionAll types (whereupon which you can also define function calls and hence `@traits`)
   3. `a1` is the first actual argument (after this `a2`, `a3` and etc. could follow in principle)
   4. `WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars()` is again a helper type to distinguish args from typevariables
@@ -150,11 +150,11 @@ It is actually easy to understand on a high level:
 
   All these arguments are passed on to the inner function, which is defined next.
 
-2. The second function is this inner function `function foo(::WhereTraits.InternalState.TraitsSingleton, ::Type{Tuple{WhereTraits.Syntax._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})`.
+2. The second function is this inner function `function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})`.
 
   Here we do the actual full traits dispatch, specifying a dispatch type for each of the arguments we just put into the inner functions. Let's again go through each single argument:
 
-  1. `::WhereTraits.InternalState.TraitsSingleton` dispatches on the singleton type to make sure this does not conflict with any other methods defined for this function
+  1. `::WhereTraits.InternalState.TraitsDefSingleton` dispatches on the singleton type to make sure this does not conflict with any other methods defined for this function
   2. `::Type{Tuple{WhereTraits.Syntax._BetweenCurliesAndArgs,Any}}` dispatches on the signature of the outer function, again adding support for types with Type-parameters which is why you see this extra type `WhereTraits.Syntax._BetweenCurliesAndArgs`. If you would have dispatch for say `function MyType{Int, Bool}(a::Any, b::Any)` this would look like `::Type{Tuple{Int, Bool, WhereTraits.Syntax._BetweenCurliesAndArgs,Any, Any}}` respectively
   3. `a` is just the standard argument, which was of type `Any`.
 
@@ -175,7 +175,7 @@ It is actually easy to understand on a high level:
 
   8. This function does not define any keyword arguments.
 
-3. The last complex looking function is `function foo(::WhereTraits.InternalState.TraitsSingleton)`. It again uses the `TraitsSingleton` to indicate that this is an internal detail of the traits syntax, however does not take any further arguments. Concretely, it defines the hidden state which is needed to correctly construct the outer and inner functions required to realise the extended dispatch of `@traits`. You don't have to understand it, still you hopefully get the feeling that everything is there.
+3. The last complex looking function is `function foo(::WhereTraits.InternalState.TraitsDefSingleton)`. It again uses the `TraitsDefSingleton` to indicate that this is an internal detail of the traits syntax, however does not take any further arguments. Concretely, it defines the hidden state which is needed to correctly construct the outer and inner functions required to realise the extended dispatch of `@traits`. You don't have to understand it, still you hopefully get the feeling that everything is there.
 
 4. Finally there is `nothing` in order to prevent printing possibly confusing internal details.
 
@@ -212,21 +212,21 @@ julia> @traits_show_implementation foo
 
   function foo(a1::T1; kwargs...) where T1
       #= none:1 =#
-      (Main).foo(WhereTraits.InternalState.TraitsSingleton(), Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, a1, WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars(), T1, WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits(), Val{isodd(a1)}(); kwargs...)
+      (Main).foo(WhereTraits.InternalState.TraitsDefSingleton(), Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, a1, WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars(), T1, WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits(), Val{isodd(a1)}(); kwargs...)
   end)
 
     •      •      •  
 
   Inner functions for signature Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}
 
-  function foo(::WhereTraits.InternalState.TraitsSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})
+  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})
       #= none:1 =#
       (a + 1) / 2
   end
 
     •      •      •  
 
-  function foo(::WhereTraits.InternalState.TraitsSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{false})
+  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{false})
       #= none:1 =#
       a / 2
   end
