@@ -242,7 +242,7 @@ julia> @traits_show_implementation foo
 
 For a high-level comparison between `WhereTraits.@traits` and `SimpleTraits.jl` see the respective [discourse discussion](https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5?u=schlichtanders).
 
-The following examples mirror https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch.
+The following examples mirror <https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch>.
 We start with defining a custom function `fn`, a custom Trait function `isTr` and some methods for `fn` dispatching on the trait.
 ```julia
 isTr(_) = false
