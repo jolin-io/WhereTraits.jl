@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2020-11-30
+### Added
+- official registered package at Julia General registry
+
+### Changed
+- Internal representation changed to use one storage per normal dispatch signature (previously it was on global storage for all) in order to have less method overwrite warnings.
+- switched dependency from  ProxyInterface (singular, now deprecated) to ProxyInterfaces (plural)
+- all dependencies are now registered in Julia General registry, hence custom registry no longer needed for CICD.
+
 ## [0.5.3] - 2020-07-27
 ### Added
 - GithubActions for CICD
