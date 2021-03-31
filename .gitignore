@@ -4,3 +4,4 @@ Manifest.toml
 *.swp
 docs/build/
 .DS_Store
+.ipynb_checkpoints/
