@@ -16,7 +16,7 @@ Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
 
 [compat]
 Compat = "2.1, 3"
-DataTypesBasic = "1.0"
+DataTypesBasic = "1.0, 2"
 ExprParsers = "1.0"
 ProxyInterfaces = "1.0"
 Setfield = "0.7"
