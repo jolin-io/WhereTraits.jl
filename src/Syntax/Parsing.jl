@@ -54,27 +54,31 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
 
   traits = map(extra_wheres) do expr
     @match(expr) do f
-      f(x::EP.Named{:arg, Symbol}) = :(Val{$(to_expr(x.value))}())  # plain arguments are interpreted as bool
+      # Bool values are lifted to typelevel BoolType
+      # plain arguments are interpreted as bool
+      f(x::EP.Named{:arg, Symbol}) = :($BoolType($(to_expr(x.value))))
       # plain calls are assumed to refer to boolean expressions
       function f(x::EP.Named{:func, EP.Call_Parsed})
         if x.value.name == :!
           # if the last call is negation "!" we take the thing which is negated
           # as a trait function and dispatch on False
-          :(Val{$(to_expr(x.value.args[1]))}())
+          :($BoolType($(to_expr(x.value.args[1]))))
         else
-          :(Val{$(to_expr(x.value))}())
+          :($BoolType($(to_expr(x.value))))
         end
       end
-      f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = to_expr(x.value.name)
+      # lifting :: dispatch to typelevel <: dispatch
+      f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = :(typeof($(to_expr(x.value.name))))
+      # standard typelevel <: dispatch
       f(x::EP.Named{<:Any, EP.TypeRange_Parsed}) = to_expr(x.value.name)
     end
   end
 
   traits_matching_types = map(enumerate(extra_wheres)) do (i, expr)
     @match(expr) do f
-      f(x::EP.Named{:arg, Symbol}) = :(Val{true})  # plain arguments are interpreted as bool
-      f(x::EP.Named{:func, EP.Call_Parsed}) = (x.value.name == :!) ? :(Val{false}) : :(Val{true})  # plain calls are assumed to refer to boolean expressions
-      f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = to_expr(x.value.type)
+      f(x::EP.Named{:arg, Symbol}) = True  # plain arguments are interpreted as bool
+      f(x::EP.Named{:func, EP.Call_Parsed}) = (x.value.name == :!) ? :(Type{<:$False}) : :(Type{<:$True})  # plain calls are assumed to refer to boolean expressions
+      f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = :(Type{<:$(to_expr(x.value.type))})
       function f(x::EP.Named{<:Any, EP.TypeRange_Parsed})
         tr = x.value
         @assert !(tr.lb === Union{} && tr.ub == Any) "should have at least an upperbound or a lowerbound"

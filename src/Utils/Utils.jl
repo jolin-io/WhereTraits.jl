@@ -3,7 +3,8 @@ export iftrue, next!, filtersplit, depends_on,
   normalize_mod_and_name, unique_funcname,
   flatten_blocks, MacroEnv, @MacroEnv, Dict_to_normalizedType,
   SortExpr, sortexpr,
-  @doc_signature, isnodocumentationfound
+  @doc_signature, isnodocumentationfound,
+  BoolType, True, False
 
 using ExprParsers
 
@@ -76,5 +77,8 @@ include("exprparsers.jl")
 include("SortExpr.jl")
 include("DocsHelper.jl")
 using .DocsHelper
+
+include("BoolType.jl")
+
 
 end  # module
