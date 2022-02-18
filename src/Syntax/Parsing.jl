@@ -84,10 +84,8 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
         @assert !(tr.lb === Union{} && tr.ub == Any) "should have at least an upperbound or a lowerbound"
         if tr.lb === Union{}  # only upperbound
           :(Type{<:$(to_expr(tr.ub))})
-        elseif tr.ub === Any  # only LowerBound
-          :(Type{>:$(to_expr(tr.lb))})
-        else  # both
-          :(Type{T} where {$(to_expr(tr.lb)) <: T <: $(to_expr(tr.up))})
+        else # LowerBound
+          error("@traits does not support dispatch on lowerbounds, found lowerbound $(tr.lb)")
         end
       end
     end
@@ -133,8 +131,7 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
   # TODO we currently do not normalize the traits function names
   # TODO e.g. using both `Base.IteratorSize(a)` and `IteratorSize(a)` result in two different traits currently
   traits_normalized = _change_symbols(traits_filtered, old_to_new)
-  # we map the traitsdefinition to a signature including a name for easier debugging and the correct type
-  traits_mapping = Dict(k => Expr(:(::), Symbol("'", k, "'"), v)
+  traits_mapping = Dict(k => Expr(:(::), v)
                         for (k, v) in zip(traits_normalized, traits_matching_types))
   # we may encounter no traits at all, namely in the case where a default clause is defined
   innerargs_traits = isempty(traits_normalized) ? [] : sortexpr(unique(traits_normalized))
@@ -149,6 +146,7 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
       traits_mapping = traits_mapping,
     ),
     WhereTraits.InternalState.DefInnerFuncNonFixedPart(
+      mod = env.mod,
       kwargs = func_parsed.kwargs,
       body = func_parsed.body,
       expr_original = expr_original,
@@ -168,6 +166,8 @@ _change_symbols(expr::Expr, symbol_mapping) = Expr(expr.head, _change_symbols(ex
 # -------------------------------------------------------------------
 
 struct _BetweenCurliesAndArgs end
+Base.show(io::IO, x::Type{<:_BetweenCurliesAndArgs}) = print(io, "<CURLIES|OUTERSIGNATURE|ARGS>")
+
 
 normalize_func(env::MacroEnv, func_expr::Expr) = normalize_func(env, EP.Function()(func_expr))
 function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)

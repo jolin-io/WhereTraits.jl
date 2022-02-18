@@ -22,7 +22,7 @@ f(5) # 3.0
 g([1,2,3]) # 43
 g(Iterators.repeated(1)) # 1
 ```
-- dispatch on bounds on functions returning Types
+- dispatch on upperbounds on functions returning Types
 ```julia
 @traits h(a) where {eltype(a) <: Number} = true
 @traits h(a) = false

@@ -7,7 +7,7 @@ using WhereTraits.Utils
 using StructEquality
 using ExprParsers
 using ProxyInterfaces
-
+using Graphs
 
 @def_structequal Base.@kwdef struct DefOuterFuncFixedPart{Signature}
     # everything under fixed should be identifiable via signature
@@ -34,6 +34,7 @@ end
   traits_mapping::Dict{Union{Symbol, Expr}, Union{Symbol, Expr}}
 end
 @def_structequal Base.@kwdef struct DefInnerFuncNonFixedPart
+  mod::Module
   kwargs::Vector{Expr}
   body::Expr
   expr_original::Expr
@@ -43,12 +44,19 @@ end
   nonfixed::DefInnerFuncNonFixedPart
 end
 
-const InnerFuncs = Dict{DefInnerFuncFixedPart, DefInnerFuncNonFixedPart}
-@def_structequal Base.@kwdef struct DefTraitsFunction{Signature}
-  outer::DefOuterFunc{Signature}
-  inners::InnerFuncs
+@def_structequal Base.@kwdef struct DefDisambiguation
+  # indices correspond to DefOuterFuncNonFixedPart.innerargs_traits
+  traits_order::DiGraph = DiGraph()
 end
 
+const DefInnerFuncs = Dict{DefInnerFuncFixedPart, DefInnerFuncNonFixedPart}
+@def_structequal Base.@kwdef struct DefTraitsFunction{Signature}
+  outer::DefOuterFunc{Signature}
+  inners::DefInnerFuncs
+  disambiguation::DefDisambiguation = DefDisambiguation()
+end
+# positional defaults are not part of kwdef
+DefTraitsFunction(outer::DefOuterFunc{Signature}, inners::DefInnerFuncs) where Signature = DefTraitsFunction(outer, inners, DefDisambiguation())
 
 @def_structequal Base.@kwdef struct Reference
   mod::Module
@@ -86,6 +94,14 @@ Used to mark a function method as belonging to the traitsdefinition
 """
 struct TraitsDefSingleton <: TraitsSingleton end
 const traitsdefsingleton = TraitsDefSingleton()
+
+"""
+  traitsdisambiguationsingleton
+
+Used to mark a function method as belonging to the disambiguation pre-phase, checking for ambiguation errors
+"""
+struct TraitsDisambiguationSingleton <: TraitsSingleton end
+const traitsdisambiguationsingleton = TraitsDisambiguationSingleton()
 
 """
     traitsstoresingleton

@@ -1,10 +1,12 @@
 module Utils
-export iftrue, next!, filtersplit, depends_on,
-  normalize_mod_and_name, unique_funcname,
-  flatten_blocks, MacroEnv, @MacroEnv, Dict_to_normalizedType,
-  SortExpr, sortexpr,
-  @doc_signature, isnodocumentationfound,
-  BoolType, True, False
+export iftrue, next!, filtersplit, depends_on
+export normalize_mod_and_name, unique_funcname
+export flatten_blocks, MacroEnv, @MacroEnv, Dict_to_normalizedType
+export SortExpr, sortexpr
+export @doc_signature, isnodocumentationfound
+export BoolType, True
+export Ambiguities
+export Counter
 
 using ExprParsers
 
@@ -79,6 +81,8 @@ include("DocsHelper.jl")
 using .DocsHelper
 
 include("BoolType.jl")
+include("Counter.jl")
 
+include("Ambiguities.jl")  # depends on Counter
 
 end  # module
