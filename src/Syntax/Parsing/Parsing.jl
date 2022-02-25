@@ -198,7 +198,7 @@ function traitarg_from_parsedtrait(expr)
             end
         end
         # lifting :: dispatch to typelevel <: dispatch
-        f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = :(typeof($(to_expr(x.value.name))))
+        f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = :(Core.Typeof($(to_expr(x.value.name))))
         # standard typelevel <: dispatch
         f(x::EP.Named{<:Any, EP.TypeRange_Parsed}) = to_expr(x.value.name)
     end
