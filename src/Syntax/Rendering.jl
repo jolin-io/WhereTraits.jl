@@ -408,7 +408,7 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
                     && length(parameters) >= 3
                     && parameters[2] === InternalState.TraitsDisambiguationSingleton
                     && parameters[3] <: Type{<:Tuple}
-                    && parameters[3] == outerfunc.fixed.signature)
+                    && parameters[3] == Type{outerfunc.fixed.signature})
 
                 push!(exprs_delete_methods, :(Base.delete_method($m)))
             end
