@@ -175,27 +175,27 @@ end
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = shape(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 3
-  state1 = @traits_get_state ow
+  state1 = @traits_store ow
   expr1 = @traits_show_implementation ow
 
   # @test length(expr1.args) == 4
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = 8
-  state2 = @traits_get_state ow
+  state2 = @traits_store ow
   expr2 = @traits_show_implementation ow
 
   @test length(state1) == length(state2)
   for (store1, store2) in zip(state1, state2)
-    @test length(store1.definitions.inners) == length(store2.definitions.inners)
+    @test length(store1.innerfuncs) == length(store2.innerfuncs)
   end
 
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasLength} = length(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.HasShape} = size(a)
   @traits_test ow(a::A) where {A, Base.IteratorSize(A)::Base.SizeUnknown} = nothing
-  state3 = @traits_get_state ow
+  state3 = @traits_store ow
   expr3 = @traits_show_implementation ow
   @test length(state1) == length(state3)
   for (store1, store3) in zip(state1, state3)
-    @test length(store1.definitions.inners) == length(store3.definitions.inners)
+    @test length(store1.innerfuncs) == length(store3.innerfuncs)
   end
 end
 

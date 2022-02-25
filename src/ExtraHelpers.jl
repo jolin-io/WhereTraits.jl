@@ -1,11 +1,12 @@
 module ExtraHelpers
-export @traits_test, @traits_get_state, @traits_show_implementation
+export @traits_test, @traits_store, @traits_show_implementation
+
 import WhereTraits
 using WhereTraits: CONFIG
 using WhereTraits.Utils
 using WhereTraits.Syntax.Rendering
-using WhereTraits.InternalState
-import WhereTraits.Syntax.Rendering: render, RenderOuterFunc, RenderInnerFunc
+using WhereTraits.InternalState: get_traitsstores
+import WhereTraits.Syntax.Rendering: render, RenderOuterFunc, RenderInnerFunc, RenderDisambiguation
 using Markdown
 
 """
@@ -27,38 +28,13 @@ end
 
 
 """
-    @traits_get_state functionname
+    @traits_store functionname
 
 Helper function which returns all the stored states which define the traitfunctions for the given function name,
 one for each traits-enabled method signature.
 """
-macro traits_get_state(funcname)
+macro traits_store(funcname)
   get_traitsstores(__module__, funcname)
-end
-
-function get_traitsstores(mod, funcname)
-  mod_original, funcname_original = normalize_mod_and_name(mod, funcname)
-  isdefined(mod_original, funcname_original) || return []
-
-  func = Core.eval(mod_original, funcname_original)
-  traits_enabled_signatures = []
-  for m in methods(func)
-    parameters = Base.unwrap_unionall(m.sig).parameters
-    if (m.sig <: Tuple
-        && length(parameters) == 3
-        && parameters[2] === WhereTraits.InternalState.TraitsStoreSingleton
-        && parameters[3] <: Type{<:Tuple})
-      # third parameter is the Type{SignatureTuple}
-      signature = parameters[3].parameters[1]
-      push!(traits_enabled_signatures, signature)
-    end
-  end
-  for sig in traits_enabled_signatures
-      if isnothing(get_traitsstore(mod, funcname, sig))
-        error("mod = $mod, funcname = $funcname, sig = $sig")
-      end
-    end
-  [get_traitsstore(mod, funcname, sig) for sig in traits_enabled_signatures]
 end
 
 
@@ -89,20 +65,35 @@ for debugging purposes only
 function traits_show_implementation_stores(env::MacroEnv, stores)
   exprs = []
   for store in stores
-    outerfunc, innerfuncs = store.definitions.outer, store.definitions.inners
+    outerfunc, innerfuncs = store.outerfunc, store.innerfuncs
     push!(exprs, Markdown.parse("Outer function for signature $(outerfunc.fixed.signature)"))
     push!(exprs, Markdown.parse("""
-    ```
-    $(render(env, store, RenderOuterFunc(outerfunc))))
+    ```julia
+    $(render(env, RenderOuterFunc(outerfunc))))
     ```
     """))
+
     push!(exprs, Markdown.parse("\n- - -\n"))
     push!(exprs, Markdown.parse("Inner functions for signature $(outerfunc.fixed.signature)"))
     for (fixed, nonfixed) in innerfuncs
       innerfunc = WhereTraits.InternalState.DefInnerFunc(fixed = fixed, nonfixed = nonfixed)
       push!(exprs, Markdown.parse("""
+      ```julia
+      $(render(env, RenderInnerFunc(outerfunc, innerfunc)))
       ```
-      $(render(env, store, RenderInnerFunc(outerfunc, innerfunc)))
+      """))
+      push!(exprs, Markdown.parse("\n- - -\n"))
+    end
+    
+    push!(exprs, Markdown.parse("\n- - -\n"))
+    push!(exprs, Markdown.parse("Disambiguation functions for signature $(outerfunc.fixed.signature)"))
+    
+    exprs_disambiguation = render(env, RenderDisambiguation(outerfunc, innerfuncs, store.disambiguation))
+    for expr_disambiguation in exprs_disambiguation.args
+      isnothing(expr_disambiguation) && continue
+      push!(exprs, Markdown.parse("""
+      ```julia
+      $(expr_disambiguation)
       ```
       """))
       push!(exprs, Markdown.parse("\n- - -\n"))

@@ -1,3 +1,6 @@
+module Counters
+export Counter
+
 Base.@kwdef struct Counter{T}
     start::T = 1
     step::T = 1
@@ -10,3 +13,5 @@ end
 Base.IteratorSize(::Type{<:Counter}) = Base.SizeUnknown()
 Base.IteratorEltype(::Type{<:Counter}) = Base.HasEltype()
 Base.eltype(::Type{Counter{T}}) where T = T
+
+end

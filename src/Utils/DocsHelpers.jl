@@ -1,4 +1,4 @@
-module DocsHelper
+module DocsHelpers
 export @doc_signature, isnodocumentationfound, mygetdoc
 using Markdown
 

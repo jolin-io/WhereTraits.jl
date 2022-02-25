@@ -1,13 +1,13 @@
 module Ambiguities
 export ambiguity, AbstractAmbiguity, Ambiguity, NoAmbiguity
-export resolve, Unresolvable
+export resolve, NoResolution, Resolution
 
 using Pipe: @pipe
 using SimpleMatch: @match
 using IterTools: subsets
 using WhereTraits.Utils: Counter
 using StructEquality
-import Base: @kwdef
+using Base: @kwdef
 using Graphs
 
 """
@@ -24,7 +24,7 @@ struct NoAmbiguity <: AbstractAmbiguity end
 @struct_hash_equal @kwdef struct Ambiguity <: AbstractAmbiguity
     indices::Vector{Int}
     mostspecific::Vector{Vector{Int64}}  # when comparing multiple dispatches there might be non-unique most-specific
-    dispatch_resolution::Vector{DataType}  # only upperbounds
+    dispatch_resolution::Vector{Type}  # only upperbounds
 end
 
 function Base.isless(a::Ambiguity, b::Ambiguity)
@@ -136,7 +136,8 @@ end
 
 given a number dispatches, it returns the found ambiguities between these dispatches which would lead to MethodErrors if not fixed otherwise
 """
-function ambiguities(dispatches)
+function ambiguities(dispatches)::Set{Ambiguity}
+    
     # ambiguities between 2
     # -------------------
     ambiguities_pair = @pipe subsets(eachindex(dispatches), 2) |>
@@ -188,19 +189,39 @@ function ambiguities(dispatches)
 end
 
 
+
+abstract type AbstractResolution end
+
+struct Resolution <: AbstractResolution
+    i_method::Int
+    dispatch::Vector{Type}
+end
+
+struct NoResolution{T} <: AbstractResolution
+    indices_traits_conflicting::T
+end
+
+
 """
     resolve(ambiguity::Ambiguity, partial_order) -> Union{Int, Unresolvable}
 
 resolves the given ambiguity in the sense of either returning an `Unresolvable` 
 or by returning the mostspecific index which wins given the `partial_order`
 """
-function resolve(ambiguity::Ambiguity, partial_order)
+function resolve(ambiguity::Ambiguity, traits, partial_order)
     indices_traits_conflicting = [i
         for (i, s) ∈ enumerate(ambiguity.mostspecific)
         if s != ambiguity.indices]
 
-    subgraph, vmap_subgraph = induced_subgraph(partial_order, indices_traits_conflicting)
+    indices_partialorder = [partial_order[trait, :trait] for trait in traits]
+    indices_partialorder
     
+    indices_partialorder_conflicting = indices_partialorder[indices_traits_conflicting]
+
+    subgraph, _vmap_subgraph = induced_subgraph(partial_order, indices_partialorder_conflicting)
+    # we can use our indices_traits_conflicting directly to get to the indices belonging to `traits`
+    vmap_subgraph = indices_traits_conflicting
+
     # the difficulty is to deal with a partial ordering
     # there may be subcomponents
     # for each such we check the elements which dominate
@@ -210,7 +231,6 @@ function resolve(ambiguity::Ambiguity, partial_order)
     for component in weakly_connected_components(subgraph)
         component_graph, vmap_component = induced_subgraph(subgraph, component)
         for attracting_component in attracting_components(component_graph)
-            @show attracting_component
             index_trait_attracting = vmap_subgraph[vmap_component[only(attracting_component)]]
             push!(indices_traits_attracting, index_trait_attracting)
         end
@@ -220,7 +240,7 @@ function resolve(ambiguity::Ambiguity, partial_order)
 
     if length(indices_dispatches_attracting) == length(ambiguity.indices)
         # the partial_order was not able to give us any information at all 
-        return Unresolvable(indices_traits_attracting)
+        return NoResolution(indices_traits_attracting)
     
     elseif length(indices_dispatches_attracting) > 1
         submostspecific = map(ambiguity.mostspecific) do s
@@ -231,18 +251,17 @@ function resolve(ambiguity::Ambiguity, partial_order)
             submostspecific,
             ambiguity.dispatch_resolution,
         )
-        resolve(subambiguity, partial_order)
+        resolve(subambiguity, traits, partial_order)
 
     elseif length(indices_dispatches_attracting) == 0
         error("This should never happen, found an attracting trait without a possible value")
 
     else  # length == 1
-        return only(indices_dispatches_attracting)
+        return Resolution(
+            only(indices_dispatches_attracting),
+            ambiguity.dispatch_resolution,
+        )
     end 
-end
-
-struct Unresolvable{T}
-    indices_traits_conflicting::T
 end
 
 end  # module
