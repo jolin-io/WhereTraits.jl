@@ -8,8 +8,12 @@ using Documenter
   doctest(WhereTraits)
 end
 
-@testset "syntax" begin
-  include("syntax.jl")
+@testset "syntax traits" begin
+  include("syntax_traits.jl")
+end
+
+@testset "syntax traitsorder" begin
+  include("syntax_traitsorder.jl")
 end
 
 @testset "README" begin

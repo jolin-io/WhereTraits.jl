@@ -217,8 +217,17 @@ function render(env::MacroEnv, torender::RenderOuterFunc)
     # add LineNumberNode for debugging purposes
     body = Expr(:block, env.source, innerfunc_call)
 
+    # if we are rendering code for the same module, we need to drop the module information
+    # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
+    # for the initial definition
+    name = if env.mod === outerfunc.fixed.mod
+        outerfunc.fixed.name
+    else
+        :($(outerfunc.fixed.mod).$(outerfunc.fixed.name))
+    end
+
     outerfunc_parsed = EP.Function_Parsed(
-        name = outerfunc.fixed.name,
+        name = name,
         curlies = outerfunc.fixed.curlies,
         args = outerfunc.fixed.args,
         kwargs = [:(kwargs...)],
@@ -296,7 +305,6 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
             function f(conflict::Ambiguities.NoResolution)
                 traits_conflicting = [traits[i] for i ∈ conflict.indices_traits_conflicting]
                 
-                body = Expr(:block, traits_conflicting...)
                 call = to_expr(EP.Call_Parsed(
                     name    = :($(outerfunc.fixed.mod).$(outerfunc.fixed.name)),
                     curlies = outerfunc.fixed.curlies,
@@ -304,15 +312,8 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
                     kwargs  = [],
                 ))
                 wheres = isempty(outerfunc.fixed.wheres) ? call : Expr(:where, call, to_expr.(outerfunc.fixed.wheres)...)
-                macro_call = Expr(:macrocall, Symbol("@traits_order"), nothing, wheres, body) 
-                expr_string = string(macro_call)
-
-                # TODO show a concrete call to @traits_order, including the dispatch and where statement
-                return :(error("""
-                    Disambiguity found. Please specify an ordering between traits like the following.
-
-                        $($expr_string)
-                    """))
+                exception = InternalState.WhereTraitsAmbiguityError(traits_conflicting, wheres)
+                return :(throw($exception))
             end
         end
 

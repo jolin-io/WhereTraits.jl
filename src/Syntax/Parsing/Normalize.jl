@@ -11,7 +11,7 @@ using ExprParsers
 # -------------------------------------------------------------------
 
 struct _BetweenCurliesAndArgs end
-Base.show(io::IO, x::Type{<:_BetweenCurliesAndArgs}) = print(io, "<CURLIES|OUTERSIGNATURE|ARGS>")
+Base.show(io::IO, x::Type{<:_BetweenCurliesAndArgs}) = print(io, "<CURLIES|SIGNATURE|ARGS>")
 
 
 normalize_func(env::MacroEnv, func_expr::Expr) = normalize_func(env, EP.Function()(func_expr))
@@ -26,8 +26,8 @@ function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)
 
     # we add _BetweenCurliesAndArgs to reuse `type` as identifying signature without mixing curly types and arg types
     typeexpr = to_expr(:(
-        Tuple{$(func_parsed.curlies...), $_BetweenCurliesAndArgs, $((to_expr(a.type) for a in args_parsed)...)}
-        where {$(to_expr(func_parsed.wheres)...)}
+        Tuple{$(func_parsed.curlies...), $_BetweenCurliesAndArgs, $((a.type for a in args_parsed)...)}
+        where {$(func_parsed.wheres...)}
     ))
     type = Base.eval(env.mod, typeexpr)
     typebase, typevars_old = split_typevar(type)  # typebase == Tuple{P1, P2, P3, ...}
@@ -64,10 +64,12 @@ function normalize_func(env::MacroEnv, func_parsed::EP.Function_Parsed)
     # dropped typevariables
     # ---------------------
 
-    typevars_old = map(func_parsed.wheres) do parsed
+    simple_where_parser = EP.AnyOf(EP.anysymbol, EP.TypeRange())
+    typevars_old = map(func_parsed.wheres) do wh
+        parsed = parse_expr(simple_where_parser, to_expr(wh))
         @match(parsed) do f
-            f(x::EP.Named{:normal, Symbol}) = x.value
-            f(x::EP.Named{:normal, EP.TypeRange_Parsed}) = x.value.name
+            f(x::Symbol) = x
+            f(x::EP.TypeRange_Parsed) = x.name
         end
     end
     typevars_kept = values(typevar_new_to_old)

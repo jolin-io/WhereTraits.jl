@@ -3,7 +3,7 @@ using Test
 
 # Test standard dispatch
 # ======================
-  @macroexpand @traits g(a) = a
+
 
 @testset "standard dispatch" begin
   # s === standard

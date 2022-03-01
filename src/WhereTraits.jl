@@ -1,5 +1,6 @@
 module WhereTraits
 export @traits, @traits_order, @traits_test, @traits_store, @traits_show_implementation
+export WhereTraitsException, WhereTraitsAmbiguityError
 
 using Compat
 

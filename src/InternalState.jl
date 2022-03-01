@@ -3,6 +3,7 @@
 
 module InternalState
 export get_traitsstore, get_traitsstores, TraitsStore
+export WhereTraitsException, WhereTraitsAmbiguityError
 
 using WhereTraits: InternalState
 using WhereTraits.Utils: normalize_mod_and_name
@@ -183,5 +184,26 @@ Used to mark a function method as used for the auto documentation feature
 """
 struct TraitsDocSingleton <: TraitsSingleton end
 const traitsdocsingleton = TraitsDocSingleton()
+
+
+
+abstract type WhereTraitsException <: Exception end
+struct WhereTraitsAmbiguityError <: WhereTraitsException
+    traits_conflicting::Vector{Union{Symbol, Expr}}
+    functioncall_signature::Expr
+end
+
+function Base.showerror(io::IO, e::WhereTraitsAmbiguityError)
+    body = Expr(:block, e.traits_conflicting...)
+                
+    macro_call = Expr(:macrocall, Symbol("@traits_order"), nothing, e.functioncall_signature, body) 
+    expr_string = string(macro_call)
+
+    print(io,"""
+    Disambiguity found. Please specify an ordering between traits, like the following.
+
+        $expr_string
+    """)
+end
 
 end # module
