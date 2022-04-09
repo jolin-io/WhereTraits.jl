@@ -129,6 +129,11 @@ For more details, take a look at the [documentation](https://jolin-io.github.io/
 ### MethodError
 Currently if you made a mistake in your traits definition, you get a pretty incomprehensible error. What you see is merely an implementation detail and it is on the roadmap to give a nice user-friendly error-handling instead.
 
+### Keyword arguments
+Keyword arguments are at the moment not support for WhereTraits dispatch. They are just passed through.
+
+It is planned to support Keyword arguments in some future release.
+
 ### Symbol Level
 
 The extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
