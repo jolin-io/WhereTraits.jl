@@ -48,12 +48,24 @@ julia> ismutable([1,2])
 true
 ```
 """
-function ismutable(t::Type)
-  # adapted from julia 1.7 Base.ismutabletype
-  t = Base.unwrap_unionall(t)
-  # TODO: what to do for `Union`?
-  return isa(t, DataType) && t.name.flags & 0x2 == 0x2
+function ismutable end
+
+if VERSION >= v"1.7.0"
+  function ismutable(t::Type)
+    # adapted from julia 1.7 Base.ismutabletype
+    t = Base.unwrap_unionall(t)
+    # TODO: what to do for `Union`?
+    return isa(t, DataType) && t.name.flags & 0x2 == 0x2
+  end
+else
+  function ismutable(t::Type)
+    # adapted from julia 1.7 Base.ismutabletype
+    t = Base.unwrap_unionall(t)
+    # TODO: what to do for `Union`?
+    return isa(t, DataType) && t.mutable
+  end
 end
+
 ismutable(value) = ismutable(typeof(value))
 
 # isimmutable is already part of Base export, hence we better use it,
