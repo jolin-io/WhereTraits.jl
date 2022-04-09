@@ -15,4 +15,4 @@ ismutable("string")  # true
 ismutable(String)  # true
 ```
 
-Please consult the file [test/BasicTraits.jl](https://github.com/schlichtanders/WhereTraits.jl/blob/master/test/BasicTraits.jl) for more examples.
+Please consult the file [test/BasicTraits.jl](https://github.com/jolin-io/WhereTraits.jl/blob/master/test/BasicTraits.jl) for more examples.

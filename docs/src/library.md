@@ -9,6 +9,11 @@ CurrentModule = WhereTraits
 
 ```@docs
 @traits
+@traits_order
+```
+
+There are also some helpers:
+```@docs
 @traits_show_implementation
 @traits_test
 ```

@@ -11,17 +11,18 @@ using Documenter
 makedocs(;
     modules=[WhereTraits, WhereTraits.BasicTraits],
     authors="Stephan Sahm <stephan.sahm@gmx.de> and contributors",
-    repo="https://github.com/schlichtanders/WhereTraits.jl/blob/{commit}{path}#L{line}",
+    repo="https://github.com/jolin-io/WhereTraits.jl/blob/{commit}{path}#L{line}",
     sitename="WhereTraits.jl",
     format=Documenter.HTML(;
         prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://schlichtanders.github.io/WhereTraits.jl",
+        canonical="https://jolin-io.github.io/WhereTraits.jl",
         assets=String[],
     ),
     pages=[
         "Home" => "index.md",
         "Manual" => [
-            "`@traits`" => "manual.md",
+            "WhereTraits Usage`" => "usage.md",
+            "WhereTraits Details`" => "details.md",
             "WhereTraits.BasicTraits" => "basictraits.md",
             "Combination with `isdef`" => "isdef.md",
         ],
@@ -31,5 +32,6 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/schlichtanders/WhereTraits.jl",
+    repo="github.com/jolin-io/WhereTraits.jl",
+    devbranch="main",
 )

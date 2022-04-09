@@ -1,6 +1,13 @@
 using WhereTraits
 using Test
 
+# TODO in case a trait is illegally defined (e.g. referring variable `b` while there is no b, every call to the traits functions fails). There should be an immediate error in best case.
+
+# TODO special case: @traits conflict(a) where {Base.IteratorSize(a) <: Base.HasShape} = 2
+# this gives unintuitive errors because it is wrongly defined, should be `::` instead of `<:`
+
+# TODO better Error Message on MethodError if a case is indeed not yet defined within traits.
+
 # Test standard dispatch
 # ======================
 

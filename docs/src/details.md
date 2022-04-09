@@ -1,24 +1,10 @@
-Manual
-======
+# WhereTraits Details
 
+## Auto Documentation
 
-Welcome to `WhereTraits.jl`. This package exports one powerful macro `@traits` with which you can extend Julia's
-where syntax. Concretely the following are supported:
-- dispatch on functions returning Bool
-```julia
-@traits f(a) where {isodd(a)} = (a+1)/2
-@traits f(a) where {!isodd(a)} = a/2
-f(4) # 2.0
-f(5) # 3.0
-```
-- dispatch on functions returning anything
-```julia
-@traits g(a) where {Base.IteratorSize(a)::Base.HasShape} = 43
-@traits g(a) = 1
-g([1,2,3]) # 43
-g(Iterators.repeated(1)) # 1
-```
-- dispatch on bounds on functions returning Types
+The package supports advanced auto-documentation which gives you a good overview about what is defined in a `@traits` function.
+
+Let's consider the following example
 ```julia
 @traits h(a) where {eltype(a) <: Number} = true
 @traits h(a) = false
@@ -26,32 +12,8 @@ h([1.0]) # true
 h([""]) # false
 ```
 
-And all this works with arbitrary many where expressions and creates optimal code where possible via standard Julia compiler.
+then you get nice formatted documentation
 
-
-*Warning: While the dispatch works for dynamic functions, it will only be able to create optimal code if your traits function supports proper type-inference. E.g. you can use `Base.isempty`, however type-inference cannot see whether it will return true or false by static inspection. Hence it will use slower dynamic code.*
-
-
-## Installation
-
-The package is soon going to be registered at General, until then you can use it by adding a custom registry.
-```julia
-using Pkg
-pkg"registry add https://github.com/JuliaRegistries/General"  # central julia registry
-pkg"registry add https://github.com/schlichtanders/SchlichtandersJuliaRegistry.jl"  # custom registry
-pkg"add WhereTraits"
-```
-
-Use it like
-```julia
-using WhereTraits
-```
-
-
-
-## Auto Documentation
-
-The package supports advanced auto-documentation which gives you a good overview about what is defined in a `@traits` function.
 ```julia
 help?> h
 
@@ -81,8 +43,14 @@ help?> h
 ```
 
 
+## MethodError handling
 
-## Implementation Details
+TODO
+
+
+## Implementation Details (partly outdated, as disambiguation is not yet described)
+
+TODO add disambiguation details
 
 The implementations uses only code-rewrite, creating two nested functions out of the one `@traits` function.
 The outer function dispatches as normal, the inner function dispatches on the added traits functionality.
@@ -240,7 +208,7 @@ julia> @traits_show_implementation foo
 
 ## Performance + Comparison with [mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)
 
-For a high-level comparison between `WhereTraits.@traits` and `SimpleTraits.jl` see the respective [discourse discussion](https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5?u=schlichtanders).
+For a high-level comparison between `WhereTraits.@traits` and `SimpleTraits.jl` see the respective [discourse discussion](https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5).
 
 The following examples mirror <https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch>.
 We start with defining a custom function `fn`, a custom Trait function `isTr` and some methods for `fn` dispatching on the trait.

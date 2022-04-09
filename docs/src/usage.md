@@ -1,28 +1,5 @@
-# WhereTraits.jl
 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://jolin-io.github.io/WhereTraits.jl/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://jolin-io.github.io/WhereTraits.jl/dev)
-[![Build Status](https://github.com/jolin-io/WhereTraits.jl/workflows/CI/badge.svg)](https://github.com/jolin-io/WhereTraits.jl/actions)
-[![Coverage](https://codecov.io/gh/jolin-io/WhereTraits.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/jolin-io/WhereTraits.jl)
-
-
-Welcome to `WhereTraits.jl`. This package exports one powerful macro `@traits` with which you can extend Julia's where syntax in order to support traits definitions.
-
-In addition, `WhereTraits` comes with a standardized way how to resolve ambiguities among traits, by defining an order among the traits with `@traits_order`.
-
-## Installation & Import
-
-Install by running
-```julia
-using Pkg
-pkg"add WhereTraits"
-```
-
-Then use this package by loading
-```julia
-using WhereTraits
-```
-which brings `@traits` into your namespace, and in addition also `@traits_order` for resolving ambiguities.
+# WhereTraits Usage
 
 ## Usage `@ŧraits`
 

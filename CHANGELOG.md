@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2022-04-09
+
+### Added
+- `@traits_order` macro was added for resolving ambiguity among traits definition in a explicit way
+- nice error reporting in case a traits ambiguity is found, including concrete `@traits_order` suggestion 
+- the underlying ambiguity handling was implemented respectively
+
+### Changed
+- updated dependency `StructEquality` to version 2.0
+- dropped support for Julia version < 1.6 for maintenance simplicity and because 1.6 replaced 1.0 as the new long term release
+
 ## [1.0.0] - 2020-11-30
 ### Added
 - official registered package at Julia General registry
