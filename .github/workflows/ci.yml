@@ -11,7 +11,7 @@ jobs:
         version:
           - '1.6'
           - '1.7'
-          - 'nightly'
+          # - 'nightly'  # get ambiguity error
         os:
           - ubuntu-latest
           - macOS-latest
