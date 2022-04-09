@@ -138,7 +138,7 @@ It is planned to support Keyword arguments in some future release.
 
 The extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
 
-    There are plans to evaluate the symbols to functions beforehand. Still in evaluation phase.  
+There are plans to evaluate the symbols to functions beforehand. Still in evaluation phase.  
 
 ### Top Level Only
 Currently **only top-level functions** are supported, as the syntax stores and needs information about previous function definitions, which it stores globally. If macros would get informed about whether they are defined within another function, WhereTraits could also support innerfunctions. 
