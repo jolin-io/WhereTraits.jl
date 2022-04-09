@@ -155,7 +155,7 @@ function Base.merge(disambiguation1::InternalState.DefDisambiguation, disambigua
 
     nv(g_new) > 0 || return copy(InternalState.DefDisambiguation(copy(g_merge)))
     
-    for (; src, dst) in edges(g_merge)
+    for (src, dst) in edges(g_merge)
         src_trait = get_prop(g_merge, src, :trait)
         dst_trait = get_prop(g_merge, dst, :trait)
 
