@@ -1,7 +1,7 @@
 
 # WhereTraits Usage
 
-## Usage `@ŧraits`
+## Usage `@traits`
 
 `@traits` supports the following three extensions to Julia's where-syntax:
 - dispatch on functions returning Bool
@@ -28,7 +28,7 @@ h([""]) # false
 
 And all this works with arbitrary many where expressions and creates optimal code where possible via standard Julia compiler.
 
-## Usage `@ŧraits_order` - Resolving Ambiguities
+## Usage `@traits_order` - Resolving Ambiguities
 
 `WhereTraits` comes with special support for resolving ambiguities among traits dispatch. 
 
