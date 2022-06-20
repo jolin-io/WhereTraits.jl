@@ -60,14 +60,6 @@ end
 # Render
 # ======
 
-# we use special Singletons as separators to distinguish different kinds of parameters
-struct _BetweenTypeVarsAndTraits end
-Base.show(io::IO, x::Type{<:_BetweenTypeVarsAndTraits}) = print(io, "<TYPEVARS|TRAITS>")
-
-struct _BetweenArgsAndTypeVars end
-Base.show(io::IO, x::Type{<:_BetweenArgsAndTypeVars}) = print(io, "<ARGS|TYPEVARS>")
-
-
 
 function render(env::MacroEnv, torender::RenderTraitsStore)
     outerfunc = torender.store.outerfunc
@@ -143,9 +135,9 @@ function render(env::MacroEnv, torender::RenderInnerFunc)
         # overwrite each other's innerfunc
         :(::$(Type{outerfunc.fixed.signature}));
         _map_args(innerfunc.fixed.args_mapping, outerfunc.fixed.innerargs_args);
-        :(::$_BetweenArgsAndTypeVars);
+        :(::$(InternalState.ArgsHelpers_BetweenArgsAndTypeVars));
         _map_args(innerfunc.fixed.typevars_mapping, outerfunc.fixed.innerargs_typevars);
-        :(::$_BetweenTypeVarsAndTraits);
+        :(::$(InternalState.ArgsHelpers_BetweenTypeVarsAndTraits));
         _map_traits(innerfunc.fixed.traits_mapping, outerfunc.nonfixed.traits);
     ]
 
@@ -203,9 +195,9 @@ function render(env::MacroEnv, torender::RenderOuterFunc)
         # overwrite each other's innerfunc
         outerfunc.fixed.signature;
         outerfunc.fixed.innerargs_args;
-        _BetweenArgsAndTypeVars();
+        InternalState.ArgsHelpers_BetweenArgsAndTypeVars();
         outerfunc.fixed.innerargs_typevars;
-        _BetweenTypeVarsAndTraits();
+        InternalState.ArgsHelpers_BetweenTypeVarsAndTraits();
         map(t -> outerfunc.nonfixed.innerargs_traits_mapping[t], outerfunc.nonfixed.traits);
     ]
     innerfunc_call = EP.Call_Parsed(
@@ -214,8 +206,18 @@ function render(env::MacroEnv, torender::RenderOuterFunc)
         args = innerargs,
         kwargs = [:(kwargs...)],
     )
+    # Rewrite Traits MethodErrors
+    innerfunc_call_wrapped = quote
+        try
+            $innerfunc_call
+        catch exc
+            $(InternalState.isWhereTraitsMethodError)(exc) || rethrow()
+            throw($(InternalState.WhereTraitsMethodError)(exc))
+        end
+    end
+
     # add LineNumberNode for debugging purposes
-    body = Expr(:block, env.source, innerfunc_call)
+    body = Expr(:block, env.source, innerfunc_call_wrapped)
 
     # if we are rendering code for the same module, we need to drop the module information
     # this is needed for defining the function the very first time as `MyModule.func(...) = ...` is invalid syntax
@@ -288,9 +290,9 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
                     # overwrite each other's innerfunc
                     outerfunc.fixed.signature;
                     outerfunc.fixed.innerargs_args;
-                    _BetweenArgsAndTypeVars();
+                    InternalState.ArgsHelpers_BetweenArgsAndTypeVars();
                     outerfunc.fixed.innerargs_typevars;
-                    _BetweenTypeVarsAndTraits();
+                    InternalState.ArgsHelpers_BetweenTypeVarsAndTraits();
                     resolution_traits;
                 ]
 
@@ -326,9 +328,9 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
             # overwrite each other's innerfunc
             :(::$(Type{outerfunc.fixed.signature}));
             outerfunc.fixed.innerargs_args;
-            :(::$_BetweenArgsAndTypeVars);
+            :(::$(InternalState.ArgsHelpers_BetweenArgsAndTypeVars));
             outerfunc.fixed.innerargs_typevars;
-            :(::$_BetweenTypeVarsAndTraits);
+            :(::$(InternalState.ArgsHelpers_BetweenTypeVarsAndTraits));
             outerargs_traits;
         ]
 
@@ -358,9 +360,9 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
             # overwrite each other's innerfunc
             outerfunc.fixed.signature;
             outerfunc.fixed.innerargs_args;
-            _BetweenArgsAndTypeVars();
+            InternalState.ArgsHelpers_BetweenArgsAndTypeVars();
             outerfunc.fixed.innerargs_typevars;
-            _BetweenTypeVarsAndTraits();
+            InternalState.ArgsHelpers_BetweenTypeVarsAndTraits();
             innerargs_traits;
         ]
 
@@ -377,9 +379,9 @@ function render(env::MacroEnv, torender::RenderDisambiguation)
             # overwrite each other's innerfunc
             :(::$(Type{outerfunc.fixed.signature}));
             outerfunc.fixed.innerargs_args;
-            :(::$_BetweenArgsAndTypeVars);
+            :(::$(InternalState.ArgsHelpers_BetweenArgsAndTypeVars));
             outerfunc.fixed.innerargs_typevars;
-            :(::$_BetweenTypeVarsAndTraits);
+            :(::$(InternalState.ArgsHelpers_BetweenTypeVarsAndTraits));
             outerargs_traits;
         ]
 
@@ -441,18 +443,21 @@ function render(env::MacroEnv, torender::RenderDoc)
 
     # start documentation with autosignature of outer function
     header = Markdown.parse("""
-    ```
-    $signature
-    ```
-    ------ Original @traits definitions follow ------
+        ```
+        $signature
+        ```
+        ------ Original @traits definitions follow ------
 
-    """)
+        """)
     separator = Markdown.parse("- - -\n")
 
     doc_exprs = Any[header]
     for (fixed, nonfixed) in innerfuncs
         # automatic signature string of inner function
-        signature_original = Markdown.parse("```julia\n$(nonfixed.expr_original.args[1])\n```")  # TODO this assumes that expr_original is a function, can we do this?
+        signature_original = Markdown.parse("""
+            ```julia
+            $(nonfixed.expr_original.args[1])
+            ```""")  # TODO this assumes that expr_original is a function, can we do this?
         push!(doc_exprs, signature_original)
         # manual doc string of respective inner function
         push!(doc_exprs, :($(WhereTraits.Utils.DocsHelpers).mygetdoc(
@@ -462,7 +467,11 @@ function render(env::MacroEnv, torender::RenderDoc)
                         Type{$(innerfunc_fixed_to_doctype(fixed))}}
         )))
         # automatic doc string of inner function definition
-        expr_original = Markdown.parse("Original @traits definition:\n```julia\n$(nonfixed.expr_original)\n```")
+        expr_original = Markdown.parse("""
+            Original @traits definition:
+            ```julia
+            $(nonfixed.expr_original)
+            ```""")
         push!(doc_exprs, expr_original)
         # better visual separation
         push!(doc_exprs, separator)
@@ -507,6 +516,5 @@ function _Dict_to_normalizedType(d::AbstractDict)
     rows = [Pair{Symbol(k), Symbol(d[k])} for k in ks]
     Tuple{rows...}
 end
-
 
 end # module

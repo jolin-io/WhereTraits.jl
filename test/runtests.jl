@@ -16,6 +16,10 @@ end
   include("syntax_traitsorder.jl")
 end
 
+@testset "syntax errors" begin
+  include("syntax_errors.jl")
+end
+
 @testset "README" begin
   include("README.jl")
 end

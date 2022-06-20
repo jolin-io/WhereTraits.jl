@@ -3,11 +3,15 @@ export parse_traitsfunction, parse_traitsorder
 
 using WhereTraits: InternalState
 using WhereTraits.Utils
+using WhereTraits.Utils: isdefined_generalized
 using SimpleMatch
 using ExprParsers
 
 include("Normalize.jl")
 using .Normalize
+
+include("Extract.jl")
+using .Extract
 
 using Graphs
 using MetaGraphs
@@ -58,7 +62,40 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
         Found $(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))) in both.")
 
 
-    # prepare extra wheres
+    # Check for UndefVarError within extra_wheres
+    # -------------------------------------------
+
+    _args = values(innerfunc_fixed.args_mapping)
+    _typevars = values(innerfunc_fixed.typevars_mapping)
+    _local_scope = [_args...; _typevars...]
+    for extra_where in extra_wheres
+        for var in extract_vars(to_expr(extra_where))
+            var ∉ _local_scope || continue
+            isdefined_generalized(env.mod, var) || throw(
+                MacroError(UndefVarError(extract_var_from_qualified(var)))
+            )
+            isa(var, Symbol) || continue
+            !isdefined(Base, var) || continue
+            !isdefined(Core, var) || continue
+            # we only warn if the var is a non-qualified global constant
+            @warn(
+                "Variable `$var` refers to a global constant." 
+                * " It is used within the trait `$(to_expr(extra_where))`." 
+                * " Could be accidental.",
+                _file=string(env.source.file),
+                _line=env.source.line,
+                _module=env.mod)
+        end
+        for var in extract_functionnames(to_expr(extra_where))
+            var ∉ _local_scope || continue
+            isdefined_generalized(env.mod, var) || throw(
+                MacroError(UndefVarError(extract_var_from_qualified(var)))
+            )
+            # do nothing, it is normal that a function is defined in the outer scope
+        end 
+    end
+
+    # prepare extra_wheres
     # --------------------
 
     traits_names = map(traitname_from_parsedtrait, extra_wheres)
@@ -159,11 +196,13 @@ function create_where_parser(args_names)
     )
 end
 
+
 function traitname_from_parsedtrait(expr)
     @match(expr) do f
         # Bool values are lifted to typelevel BoolType
         # plain arguments are interpreted as bool
         f(x::EP.Named{:arg, Symbol}) = to_expr(x.value)
+
         # plain calls are assumed to refer to boolean expressions
         function f(x::EP.Named{:func, EP.Call_Parsed})
             if x.value.name == :!
@@ -174,8 +213,10 @@ function traitname_from_parsedtrait(expr)
                 to_expr(x.value)
             end
         end
+
         # lifting :: dispatch to typelevel <: dispatch
         f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = to_expr(x.value.name)
+
         # standard typelevel <: dispatch
         f(x::EP.Named{<:Any, EP.TypeRange_Parsed}) = to_expr(x.value.name)
     end
@@ -187,6 +228,7 @@ function traitarg_from_parsedtrait(expr)
         # Bool values are lifted to typelevel BoolType
         # plain arguments are interpreted as bool
         f(x::EP.Named{:arg, Symbol}) = :($BoolType($(to_expr(x.value))))
+
         # plain calls are assumed to refer to boolean expressions
         function f(x::EP.Named{:func, EP.Call_Parsed})
             if x.value.name == :!
@@ -197,8 +239,10 @@ function traitarg_from_parsedtrait(expr)
                 :($BoolType($(to_expr(x.value))))
             end
         end
+
         # lifting :: dispatch to typelevel <: dispatch
         f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = :(Core.Typeof($(to_expr(x.value.name))))
+
         # standard typelevel <: dispatch
         f(x::EP.Named{<:Any, EP.TypeRange_Parsed}) = to_expr(x.value.name)
     end
@@ -207,9 +251,14 @@ end
 
 function traitupperbound_from_parsedtrait(expr)
     @match(expr) do f
-        f(x::EP.Named{:arg, Symbol}) = True  # plain arguments are interpreted as bool
-        f(x::EP.Named{:func, EP.Call_Parsed}) = (x.value.name == :!) ? False : True  # plain calls are assumed to refer to boolean expressions
+        # plain arguments are interpreted as bool
+        f(x::EP.Named{:arg, Symbol}) = True
+
+        # plain calls are assumed to refer to boolean expressions
+        f(x::EP.Named{:func, EP.Call_Parsed}) = (x.value.name == :!) ? False : True
+
         f(x::EP.Named{<:Any, EP.TypeAnnotation_Parsed}) = to_expr(x.value.type)
+
         function f(x::EP.Named{<:Any, EP.TypeRange_Parsed})
             tr = x.value
             @assert !(tr.lb === Union{} && tr.ub == Any) "should have at least an upperbound or a lowerbound"

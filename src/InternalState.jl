@@ -1,9 +1,7 @@
-# Internal State of the syntax
-# ============================
-
 module InternalState
 export get_traitsstore, get_traitsstores, TraitsStore
-export WhereTraitsException, WhereTraitsAmbiguityError
+export WhereTraitsException, WhereTraitsAmbiguityError, WhereTraitsMethodError
+export isWhereTraitsMethodError
 
 using WhereTraits: InternalState
 using WhereTraits.Utils: normalize_mod_and_name
@@ -13,6 +11,10 @@ using ProxyInterfaces
 
 using Graphs
 using MetaGraphs
+
+
+# Internal State of the syntax
+# ============================
 
 @struct_hash_equal Base.@kwdef struct DefOuterFuncFixedPart{Signature}
     # everything under fixed should be identifiable via signature
@@ -111,6 +113,10 @@ const DefInnerFuncs = Dict{DefInnerFuncFixedPart, DefInnerFuncNonFixedPart}
     disambiguation::DefDisambiguation
 end
 
+
+# Storing and Accessing Traits Information
+# ========================================
+
 """
 returns TraitsStore or nothing if no TraitsStore could be found
 """
@@ -186,6 +192,19 @@ struct TraitsDocSingleton <: TraitsSingleton end
 const traitsdocsingleton = TraitsDocSingleton()
 
 
+# Rendering specific
+# ==================
+
+# we use special Singletons as separators to distinguish different kinds of parameters
+struct ArgsHelpers_BetweenTypeVarsAndTraits end
+Base.show(io::IO, x::Type{<:ArgsHelpers_BetweenTypeVarsAndTraits}) = print(io, "<TYPEVARS|TRAITS>")
+
+struct ArgsHelpers_BetweenArgsAndTypeVars end
+Base.show(io::IO, x::Type{<:ArgsHelpers_BetweenArgsAndTypeVars}) = print(io, "<ARGS|TYPEVARS>")
+
+
+# Error Handling
+# ==============
 
 abstract type WhereTraitsException <: Exception end
 struct WhereTraitsAmbiguityError <: WhereTraitsException
@@ -204,6 +223,97 @@ function Base.showerror(io::IO, e::WhereTraitsAmbiguityError)
 
         $expr_string
     """)
+end
+
+
+# MethodError support
+# -------------------
+
+Base.@kwdef struct WhereTraitsMethodError{F, Signature, Args, Typevars, Traits} <: Exception
+    f::F
+    signature::Signature
+    args::Args
+    typevars::Typevars
+    traits::Traits
+end
+
+function Base.showerror(io::IO, ex::WhereTraitsMethodError)
+    traitsstore = ex.f(traitsstoresingleton, ex.signature)
+
+    innerargs_traits_mapping = traitsstore.outerfunc.nonfixed.innerargs_traits_mapping
+    traitsdef = map(traitsstore.outerfunc.nonfixed.traits, ex.traits) do traitname, trait_arg
+         :($(innerargs_traits_mapping[traitname]) == $trait_arg)
+    end
+
+    outerfunc_signature = to_expr(EP.Signature_Parsed(
+        name = traitsstore.outerfunc.fixed.name,
+        curlies = traitsstore.outerfunc.fixed.curlies,
+        args = traitsstore.outerfunc.fixed.args,
+        kwargs = [:(kwargs...)],
+        wheres = traitsstore.outerfunc.fixed.wheres,
+    ))
+
+    show(io, MIME"text/markdown"(), Markdown.parse("""
+        TraitsMethodError: no method matching `$(ex.f)($(join(ex.args, ",")))`.
+        
+        It corresponds to the normal julia-dispatch (aka "outerfunction")
+        ```julia
+        $outerfunc_signature
+        ```
+        and the traits
+        ```julia
+        $(join(traitsdef, "\n"))
+        ```
+        however, the only available traits definitions are:
+        - - - - - - - - - - - - - -
+        $(join([
+                """
+                ```julia
+                $(nonfixed.expr_original.args[1])
+                ```
+                which defines the traits
+                ```julia
+                $(join([
+                    :($(innerargs_traits_mapping[traitname]) <: $(dispatch.args[1].args[2].args[1]))
+                    # dispatch looks like :(::Type{<:B})
+                    for (traitname, dispatch) in fixed.traits_mapping
+                    # fixed.traits_mapping looks like
+                    # Dict{Union{Expr, Symbol}, Union{Expr, Symbol}} with 1 entry:
+                    #     :(Base.IteratorSize(a1)) => :(::Type{<:Base.HasShape})
+                ], "\n"))
+                ```
+                - - - - - - - - - - - - - -
+                """
+                for (fixed, nonfixed) in traitsstore.innerfuncs
+            ],
+            "\n"))
+        """))
+end
+
+function WhereTraitsMethodError(exc::MethodError)
+    @assert (length(exc.args) > 0
+        && isa(exc.args[1], TraitsDefSingleton))
+
+    betweenArgsAndTypeVars = findfirst(exc.args) do arg
+        isa(arg, ArgsHelpers_BetweenArgsAndTypeVars)
+    end
+    betweenTypeVarsAndTraits = findfirst(exc.args) do arg
+        isa(arg, ArgsHelpers_BetweenTypeVarsAndTraits)
+    end
+    
+    WhereTraitsMethodError(
+        f = exc.f,
+        signature = exc.args[2],
+        args = exc.args[3:betweenArgsAndTypeVars-1],
+        typevars = exc.args[betweenArgsAndTypeVars+1:betweenTypeVarsAndTraits-1],
+        traits = exc.args[betweenTypeVarsAndTraits+1:end]
+    )
+end
+
+isWhereTraitsMethodError(other_err) = false
+function isWhereTraitsMethodError(exc::MethodError)
+    (length(exc.args) > 0
+    && isa(exc.args[1], TraitsDefSingleton))
 end
 
 end # module

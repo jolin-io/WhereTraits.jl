@@ -71,9 +71,9 @@ function foo(a1::T1; kwargs...) where T1
       WhereTraits.InternalState.TraitsDefSingleton(),
       Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any},
       a1,
-      WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars(),
+      WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars(),
       T1,
-      WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits(),
+      WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits(),
       Val{isodd(a1)}();
       kwargs...)
 end
@@ -81,9 +81,9 @@ end
 function foo(::WhereTraits.InternalState.TraitsDefSingleton,
              ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}},
              a,
-             ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars,
+             ::WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars,
              var"'T1'"::Any,
-             ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits,
+             ::WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits,
              var"'Val{isodd(a1)}()'"::Val{true})
     #= none:1 =#
     (a + 1) / 2
@@ -110,9 +110,9 @@ It is actually easy to understand on a high level:
   1. `WhereTraits.InternalState.TraitsDefSingleton()` is a helper type indicating that this is a call to a traits inner function
   2. `Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}` is the complete function signature of the outer function, with an additional helper `_BetweenCurliesAndArgs` to deal with TypeParameters of UnionAll types (whereupon which you can also define function calls and hence `@traits`)
   3. `a1` is the first actual argument (after this `a2`, `a3` and etc. could follow in principle)
-  4. `WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars()` is again a helper type to distinguish args from typevariables
+  4. `WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars()` is again a helper type to distinguish args from typevariables
   5. `T1` is a type parameter (again here `T2`, `T3`, etc. would follow if there are more typeparameters)
-  6. `WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits()` is another helper, now separating the traits definitions
+  6. `WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits()` is another helper, now separating the traits definitions
   7. `Val{isodd(a1)}()` here comes our first actual trait definition (if you define more traits, they would follow here)
   8. `; kwargs...` at last all kwargs are just passed through (dispatch on kwargs is not yet supported)
 
@@ -180,21 +180,21 @@ julia> @traits_show_implementation foo
 
   function foo(a1::T1; kwargs...) where T1
       #= none:1 =#
-      (Main).foo(WhereTraits.InternalState.TraitsDefSingleton(), Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, a1, WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars(), T1, WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits(), Val{isodd(a1)}(); kwargs...)
+      (Main).foo(WhereTraits.InternalState.TraitsDefSingleton(), Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}, a1, WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars(), T1, WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits(), Val{isodd(a1)}(); kwargs...)
   end)
 
     •      •      •  
 
   Inner functions for signature Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}
 
-  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})
+  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{true})
       #= none:1 =#
       (a + 1) / 2
   end
 
     •      •      •  
 
-  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.Syntax.Rendering._BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.Syntax.Rendering._BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{false})
+  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{WhereTraits.Syntax.Parsing._BetweenCurliesAndArgs,Any}}, a, ::WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars, var"'T1'"::Any, ::WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits, var"'Val{isodd(a1)}()'"::Val{false})
       #= none:1 =#
       a / 2
   end
