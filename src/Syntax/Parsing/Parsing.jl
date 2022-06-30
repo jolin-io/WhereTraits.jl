@@ -62,14 +62,27 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
         Found $(intersect(keys(innerfunc_fixed.args_mapping), keys(innerfunc_fixed.typevars_mapping))) in both.")
 
 
+    # deal with dropped typevariables 
+    # -------------------------------
+
+    filtered = [!depends_on(to_expr(expr), typevars_dropped) for expr in extra_wheres]
+    extra_wheres_filtered = extra_wheres[filtered]
+    
+    if length(extra_wheres) != length(extra_wheres_filtered)
+        extra_wheres_dropped = extra_wheres[.!filtered]
+        on_traits_dropped("Given traits depend on droppable typeparameters ($typevars_dropped). WhereTraits: $extra_wheres_dropped")
+    end
+
+
     # Check for UndefVarError within extra_wheres
     # -------------------------------------------
 
     _args = values(innerfunc_fixed.args_mapping)
     _typevars = values(innerfunc_fixed.typevars_mapping)
     _local_scope = [_args...; _typevars...]
-    for extra_where in extra_wheres
-        for var in extract_vars(to_expr(extra_where))
+    for extra_where in extra_wheres_filtered
+        expr = to_expr(extra_where)
+        for var in extract_vars(expr)
             var ∉ _local_scope || continue
             isdefined_generalized(env.mod, var) || throw(
                 MacroError(UndefVarError(extract_var_from_qualified(var)))
@@ -80,13 +93,13 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
             # we only warn if the var is a non-qualified global constant
             @warn(
                 "Variable `$var` refers to a global constant." 
-                * " It is used within the trait `$(to_expr(extra_where))`." 
+                * " It is used within the trait `$expr`." 
                 * " Could be accidental.",
                 _file=string(env.source.file),
                 _line=env.source.line,
                 _module=env.mod)
         end
-        for var in extract_functionnames(to_expr(extra_where))
+        for var in extract_functionnames(expr)
             var ∉ _local_scope || continue
             isdefined_generalized(env.mod, var) || throw(
                 MacroError(UndefVarError(extract_var_from_qualified(var)))
@@ -95,26 +108,13 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
         end 
     end
 
+
     # prepare extra_wheres
     # --------------------
 
-    traits_names = map(traitname_from_parsedtrait, extra_wheres)
-    traits_args = map(traitarg_from_parsedtrait, extra_wheres)
-    traits_upperbounds = map(traitupperbound_from_parsedtrait, extra_wheres)
-
-
-    # deal with dropped typevariables 
-    # -------------------------------
-
-    filtered = [!depends_on(t, typevars_dropped) for t in traits_names]
-    traits_names_filtered = traits_names[filtered]
-    traits_args_filtered = traits_args[filtered]
-    traits_upperbounds_filtered = traits_upperbounds[filtered]
-
-    if length(traits_names) != length(traits_names_filtered)
-        traits_dropped = traits_names[.!filtered]
-        on_traits_dropped("Given traits depend on droppable typeparameters ($typevars_dropped). WhereTraits: $traits_dropped")
-    end
+    traits_names = map(traitname_from_parsedtrait, extra_wheres_filtered)
+    traits_args = map(traitarg_from_parsedtrait, extra_wheres_filtered)
+    traits_upperbounds = map(traitupperbound_from_parsedtrait, extra_wheres_filtered)
 
 
     # normalized naming also for innerfunc body
@@ -123,19 +123,19 @@ function parse_traitsfunction(env, func_parsed::EP.Function_Parsed, expr_origina
     old_to_new = Dict(v => k for (k, v) in merge(innerfunc_fixed.args_mapping, innerfunc_fixed.typevars_mapping))
     # TODO we currently do not normalize the traits function names
     # TODO e.g. using both `Base.IteratorSize(a)` and `IteratorSize(a)` result in two different traits 
-    traits_names_filtered_normalized = change_symbols(old_to_new, traits_names_filtered) 
-    traits_args_filtered_normalized = change_symbols(old_to_new, traits_args_filtered)
+    traits_names_normalized = change_symbols(old_to_new, traits_names) 
+    traits_args_normalized = change_symbols(old_to_new, traits_args)
 
     traits_mapping = Dict(k => :(::Type{<:$v})
-        for (k, v) in zip(traits_names_filtered_normalized, traits_upperbounds_filtered))
+        for (k, v) in zip(traits_names_normalized, traits_upperbounds))
 
     innerargs_traits_mapping = Dict(k => v
-        for (k, v) in zip(traits_names_filtered_normalized, traits_args_filtered_normalized))
+        for (k, v) in zip(traits_names_normalized, traits_args_normalized))
 
-    @assert length(traits_mapping) == length(traits_names_filtered_normalized) "FATAL. Found duplicate traits in $(traits_names_filtered_normalized)"
+    @assert length(traits_mapping) == length(traits_names_normalized) "FATAL. Found duplicate traits in $(traits_names_normalized)"
     
     # we may encounter no traits at all, namely in the case where a default clause is defined
-    traits = sortexpr(traits_names_filtered_normalized)
+    traits = sortexpr(traits_names_normalized)
 
 
     # bring everything together

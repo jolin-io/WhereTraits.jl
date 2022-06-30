@@ -11,6 +11,7 @@ using ProxyInterfaces
 
 using Graphs
 using MetaGraphs
+using Markdown
 
 
 # Internal State of the syntax
@@ -242,7 +243,7 @@ function Base.showerror(io::IO, ex::WhereTraitsMethodError)
 
     innerargs_traits_mapping = traitsstore.outerfunc.nonfixed.innerargs_traits_mapping
     traitsdef = map(traitsstore.outerfunc.nonfixed.traits, ex.traits) do traitname, trait_arg
-         :($(innerargs_traits_mapping[traitname]) == $trait_arg)
+         :($(innerargs_traits_mapping[traitname]) <: $trait_arg)
     end
 
     outerfunc_signature = to_expr(EP.Signature_Parsed(
@@ -260,7 +261,7 @@ function Base.showerror(io::IO, ex::WhereTraitsMethodError)
         ```julia
         $outerfunc_signature
         ```
-        and the traits
+        and the traits (traits are normalized to <:)
         ```julia
         $(join(traitsdef, "\n"))
         ```
@@ -271,7 +272,7 @@ function Base.showerror(io::IO, ex::WhereTraitsMethodError)
                 ```julia
                 $(nonfixed.expr_original.args[1])
                 ```
-                which defines the traits
+                which defines the traits (traits are normalized to <:)
                 ```julia
                 $(join([
                     :($(innerargs_traits_mapping[traitname]) <: $(dispatch.args[1].args[2].args[1]))
@@ -287,6 +288,15 @@ function Base.showerror(io::IO, ex::WhereTraitsMethodError)
                 for (fixed, nonfixed) in traitsstore.innerfuncs
             ],
             "\n"))
+        
+        Note the following `<:` standardization of traits:
+
+        | WhereTraits        | Example                               | `<:` standardization                                   |
+        | ------------------ | ------------------------------------- | ------------------------------------------------------ |
+        | bool trait         | `iseven(a)`                           | `WhereTraits.BoolType(iseven(a)) <: WhereTraits.True`  |
+        | negated bool trait | `!iseven(a)`                          | `WhereTraits.BoolType(iseven(a)) <: WhereTraits.False` |
+        | `isa` trait        | `Base.IteratorSize(a)::Base.HasShape` | `Core.Typeof(Base.IteratorSize(a)) <: Base.HasShape`   |
+        | `<:` trait         | `Base.eltype(a) <: Number`            | `Base.eltype(a) <: Number`                             |
         """))
 end
 
