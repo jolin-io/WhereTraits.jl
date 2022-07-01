@@ -6,7 +6,6 @@ import WhereTraits
 using WhereTraits: CONFIG
 using WhereTraits.Utils
 using WhereTraits.InternalState
-using Suppressor
 
 include("Lowering.jl")
 using .Lowering

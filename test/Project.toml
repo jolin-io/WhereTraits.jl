@@ -1,0 +1,7 @@
+[deps]
+DataTypesBasic = "83eed652-29e8-11e9-12da-a7c29d64ffc9"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
+StringDistances = "88034a9c-02f8-509d-84a9-84ec65e18404"
+Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
