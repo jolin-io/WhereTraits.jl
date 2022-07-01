@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2022-07-01
+### Added
+- in case of a MethodError, a `WhereTraitsMethodError` is thrown instead which adds 
+  detailed information about the available traits.
+- `UndefVarError` is thrown if variables are used within the traits definition which are
+  obvious typos.
+- added documentation fo WhereTraitsMethodError
+
 ## [1.1.0] - 2022-04-09
 
 ### Added
