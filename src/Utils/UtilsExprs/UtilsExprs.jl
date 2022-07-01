@@ -7,6 +7,9 @@ include("SortExprs.jl")
 include("MacroEnvs.jl")
 @reexport using .MacroEnvs
 
+include("MacroErrors.jl")
+@reexport using .MacroErrors
+
 export depends_on, flatten_blocks, change_symbols
 
 using ExprParsers

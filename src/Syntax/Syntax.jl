@@ -6,7 +6,6 @@ import WhereTraits
 using WhereTraits: CONFIG
 using WhereTraits.Utils
 using WhereTraits.InternalState
-using Suppressor
 
 include("Lowering.jl")
 using .Lowering
@@ -28,14 +27,19 @@ using .Merging
 """
 @traits f(a, b) where {!isempty(a), !isempty(b)} = (a[1], b[1])
 """
-macro traits(expr_original)
-    expr_expanded = macroexpand(__module__, expr_original)
-    expr_traits = _traits(@MacroEnv, expr_expanded, expr_original)
-    expr_traits = esc(expr_traits)
-    if CONFIG.suppress_on_traits_definitions
-        expr_traits = :(@suppress $expr_traits)
+macro traits(expr)
+    traits_impl(@MacroEnv, expr)
+end
+
+function traits_impl(env::MacroEnv, expr_original)
+    expr_expanded = macroexpand(env.mod, expr_original)
+    expr_traits = try
+        _traits(env, expr_expanded, expr_original)
+    catch exc
+        isa(exc, MacroError) || rethrow()
+        return :($throw($(exc.exception)))
     end
-    expr_traits
+    esc(expr_traits)
 end
 
 function _traits(env, expr_expanded::Expr, expr_original::Expr)
@@ -51,7 +55,7 @@ function _traits_parsed(env, func_parsed::EP.Function_Parsed, expr_original::Exp
     exprs = [render(env, basefunc_to_be_rendered)]
 
     for lowering in lowerings
-        # As lowering dropped variables, also traits may need to be dropped. Do this silently.
+        # As the lowering-process dropped variables, also traits may need to be dropped. Do this silently.
         lowered_outer, lowered_inner = parse_traitsfunction(env, lowering, expr_original, on_traits_dropped = msg -> nothing)
         # we don't document lowerings
         # lowerings have another distinct signature, hence we do not reuse basefunc_store_new
@@ -86,9 +90,6 @@ macro traits_order(functioncall, body)
 
     expr_disambiguation = _traits_order(@MacroEnv, expr_expanded, expr_original)
     expr_disambiguation = esc(expr_disambiguation)
-    if CONFIG.suppress_on_traits_definitions
-        expr_disambiguation = :(@suppress $expr_disambiguation)
-    end
     expr_disambiguation
 end
 

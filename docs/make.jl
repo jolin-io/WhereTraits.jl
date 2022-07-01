@@ -24,7 +24,7 @@ makedocs(;
             "WhereTraits Usage`" => "usage.md",
             "WhereTraits Details`" => "details.md",
             "WhereTraits.BasicTraits" => "basictraits.md",
-            "Combination with `isdef`" => "isdef.md",
+            # "Combination with `isdef`" => "isdef.md",
         ],
         "Library" => "library.md",
     ],

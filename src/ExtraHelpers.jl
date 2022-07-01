@@ -14,15 +14,15 @@ like @traits, and works within Test.@testset, but cannot be doc-stringed
 
 needed because of https://github.com/JuliaLang/julia/issues/34263
 """
-macro traits_test(expr_original)
-  expr = macroexpand(__module__, expr_original)
-  expr_traits = WhereTraits.Syntax._traits(@MacroEnv, expr, expr_original)
+macro traits_test(expr)
+  expr_traits = WhereTraits.Syntax.traits_impl(@MacroEnv, expr)
+  if isa(expr_traits, Expr) && expr_traits.head == :escape
+    # we need to unwrap the escape
+    expr_traits = expr_traits.args[1]
+  end
   # :(eval($(QuoteNode(...))) is a workaround for @testset, see https://github.com/JuliaLang/julia/issues/34263
   expr_traits = :(eval($(QuoteNode(expr_traits))))
   expr_traits = esc(expr_traits)
-  if CONFIG.suppress_on_traits_definitions
-    expr_traits = :(@suppress $expr_traits)
-  end
   expr_traits
 end
 

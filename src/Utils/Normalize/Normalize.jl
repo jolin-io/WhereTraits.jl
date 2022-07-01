@@ -1,5 +1,5 @@
 module Normalize
-export normalize_mod_and_name, normalized_arg_by_position
+export isdefined_generalized, normalize_mod_and_name, normalized_arg_by_position
 
 using Reexport
 
@@ -12,8 +12,54 @@ using ExprParsers
 
 normalized_arg_by_position(position::Int) = Symbol("a", position)
 
+"""
+    isdefined_generalized(mod, name)
+
+like `Base.isdefined`, however can handle nested, qualified names (i.e. containing dots)
+
+Examples
+--------
+
+```jldoctest
+julia> using WhereTraits.Utils: isdefined_generalized
+
+julia> isdefined_generalized(Main, :(Base.IteratorSize))
+true
+
+julia> isdefined_generalized(Main, :(Base.HasShape2))
+false
+```
+"""
+function isdefined_generalized(mod, name)
+    try
+        mod, name = normalize_mod_and_name(mod, name)
+    catch ex
+        isa(ex, UndefVarError) || rethrow()
+        return false
+    end
+    isdefined(mod, name)
+end
 
 
+"""
+    normalize_mod_and_name(mod, name)
+
+Does nothing if `name` is a Symbol.
+If `name` is a qualified name (i.e. containing a reference to a submodule),
+the final submodule and simple Symbol name are returned.
+
+Examples
+--------
+```jldoctest
+julia> using WhereTraits.Utils: normalize_mod_and_name
+
+julia> normalize_mod_and_name(Base, :iseven)
+(Base, :iseven)
+
+julia> normalize_mod_and_name(Base, :(Iterators.CountFrom))
+(Base.Iterators, :CountFrom)
+```
+"""
 function normalize_mod_and_name(mod, name)
     parser = EP.AnyOf(EP.anysymbol, EP.NestedDot())
     normalize_mod_and_name(mod, parse_expr(parser, name))

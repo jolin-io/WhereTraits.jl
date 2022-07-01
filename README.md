@@ -121,24 +121,17 @@ julia> conflict([1,2,3,4])
 For more details, take a look at the [documentation](https://jolin-io.github.io/WhereTraits.jl/dev).
 
 
-## Limitations & Future Plans
+## Limitations
 
 ### Optimal Code
 *Warning: While the dispatch works for dynamic functions, it will only be able to create optimal code if your traits function supports proper type-inference. E.g. you can use `Base.isempty`, however type-inference cannot see whether it will return true or false by static inspection. Hence it will use slower dynamic code.*
 
-### MethodError
-Currently if you made a mistake in your traits definition, you get a pretty incomprehensible error. What you see is merely an implementation detail and it is on the roadmap to give a nice user-friendly error-handling instead.
-
 ### Keyword arguments
 Keyword arguments are at the moment not support for WhereTraits dispatch. They are just passed through.
 
-It is planned to support Keyword arguments in some future release.
-
 ### Symbol Level
 
-The extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base:IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
-
-There are plans to evaluate the symbols to functions beforehand. Still in evaluation phase.  
+The extended where syntax is currently implemented on **symbol level**, which is why traits functions like `Base.IteratorSize` and the non-qualified `IteratorSize` (assuming you imported `import Base: IteratorSize`) are treated as two different functions, despite being the same. So for now try to only use the one style or the other.
 
 ### Top Level Only
 Currently **only top-level functions** are supported, as the syntax stores and needs information about previous function definitions, which it stores globally. If macros would get informed about whether they are defined within another function, WhereTraits could also support innerfunctions. 
@@ -149,4 +142,11 @@ The `@traits` macro currently does not work well within the `Test.@testset` macr
 Nevertheless there is a workaround. WhereTraits.jl exports a `@traits_test` macro variant which works better, but still might have cases where it fails. This needs to be investigated further, and maybe needs a change on `Test.@testset`.
 
 
+## Other traits packages
 
+There are many different attempts to add traits to Julia.
+Everyone puts a different emphasis on different aspects of traits interfaces.
+
+- SimpleTraits.jl
+- BinaryTraits.jl
+- CanonicalTraits.jl

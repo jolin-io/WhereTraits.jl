@@ -67,19 +67,19 @@ end
 
   @test fcc(1:4) == (4,)
   @test fcc("hallo") == 5
-  @test_throws MethodError fcc(Base.Iterators.repeated(2))  # IteratorSize == Infinite
+  @test_throws WhereTraitsMethodError fcc(Base.Iterators.repeated(2))  # IteratorSize == Infinite
 
   @traits_test fcc2(a) where {eltype(a)::Type{Int}} = 5 + sum(a)
   @traits_test fcc2(a) where {eltype(a)::Type{String}} = "[$(join(a, ","))]"
   @test fcc2([1,2,3,4]) == 15
   @test fcc2(["a", "b"]) == "[a,b]"
-  @test_throws MethodError fcc2([2.0, 5.0])
+  @test_throws WhereTraitsMethodError fcc2([2.0, 5.0])
 
   @traits_test fcc3(a::Val{T}) where {T, T::Int} = T + 4
   @traits_test fcc3(a::Val{T}) where {T, T::Symbol} = T
   @test fcc3(Val(1)) == 5
   @test fcc3(Val(:hi)) == :hi
-  @test_throws MethodError fcc3(Val(true))
+  @test_throws WhereTraitsMethodError fcc3(Val(true))
 end
 
 
@@ -92,21 +92,21 @@ end
   @traits_test fsc(a::A) where {A, eltype(A)<:String} = "[$(join(a, ","))]"
   @test fsc([1,2,3,4]) == 15
   @test fsc(["a", "b"]) == "[a,b]"
-  @test_throws MethodError fsc([2.0, 5.0])
+  @test_throws WhereTraitsMethodError fsc([2.0, 5.0])
 
   @traits_test fsc2(a) where {eltype(a)<:Int} = 5 + sum(a)
   @traits_test fsc2(a) where {eltype(a)<:String} = "[$(join(a, ","))]"
   @test fsc2([1,2,3,4]) == 15
   @test fsc2(["a", "b"]) == "[a,b]"
   @traits_show_implementation fsc2
-  @test_throws MethodError fsc2([2.0, 5.0])
+  @test_throws WhereTraitsMethodError fsc2([2.0, 5.0])
 
   @traits_test fsc2(a) where {eltype(a)<:Int} = 5 + sum(a)
   @traits_test fsc2(a) where {eltype(a)<:String} = "[$(join(a, ","))]"
   @test fsc2([1,2,3,4]) == 15
   @test fsc2(["a", "b"]) == "[a,b]"
   @traits_show_implementation fsc2
-  @test_throws MethodError fsc2([2.0, 5.0])
+  @test_throws WhereTraitsMethodError fsc2([2.0, 5.0])
 end
 
 # Test default
@@ -140,8 +140,8 @@ end
   @traits_test fda2(a::A, b::B=50) where {A<:Number, B<:Number, eltype(A) == Int, A == B, eltype(b) <: Number} = a + b + 999
   @traits_show_implementation fda2
   @test fda2(1) == 1050  # should not throw "UndefVarError: B not defined"
-  @test_throws MethodError fda2(1.0)
-  @test_throws MethodError fda2(1.0, 4)
+  @test_throws WhereTraitsMethodError fda2(1.0)
+  @test_throws WhereTraitsMethodError fda2(1.0, 4)
 end
 
 # Test kwargs

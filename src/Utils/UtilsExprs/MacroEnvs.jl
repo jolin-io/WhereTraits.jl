@@ -7,9 +7,10 @@ export MacroEnv, @MacroEnv
 end
 
 macro MacroEnv()
-  quote
-    MacroEnv($(esc(:__source__)), $(esc(:__module__)))
-  end
+  esc(quote
+    $MacroEnv(__source__, __module__)
+  end)
 end
+
 
 end
