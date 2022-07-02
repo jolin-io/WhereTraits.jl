@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Dispatch on whether functions are defined - using IsDef.jl · WhereTraits.jl</title><script data-outdated-warner src="../assets/warner.js"></script><link rel="canonical" href="https://jolin-io.github.io/WhereTraits.jl/isdef/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.044/juliamono.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">WhereTraits.jl</a></span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../usage/">WhereTraits Usage`</a></li><li><a class="tocitem" href="../details/">WhereTraits Details`</a></li><li><a class="tocitem" href="../basictraits/">WhereTraits.BasicTraits</a></li></ul></li><li><a class="tocitem" href="../library/">Library</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Dispatch on whether functions are defined - using IsDef.jl</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Dispatch on whether functions are defined - using IsDef.jl</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/jolin-io/WhereTraits.jl/blob/main/docs/src/isdef.md#L" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Dispatch-on-whether-functions-are-defined-using-[IsDef.jl](https://github.com/schlichtanders/IsDef.jl)"><a class="docs-heading-anchor" href="#Dispatch-on-whether-functions-are-defined-using-[IsDef.jl](https://github.com/schlichtanders/IsDef.jl)">Dispatch on whether functions are defined - using <a href="https://github.com/schlichtanders/IsDef.jl">IsDef.jl</a></a><a id="Dispatch-on-whether-functions-are-defined-using-[IsDef.jl](https://github.com/schlichtanders/IsDef.jl)-1"></a><a class="docs-heading-anchor-permalink" href="#Dispatch-on-whether-functions-are-defined-using-[IsDef.jl](https://github.com/schlichtanders/IsDef.jl)" title="Permalink"></a></h1><p>You want to dispatch on whether a function is defined or not? I guess this is a standard scenario and hence I tried to support it, and extracted it into another package.</p><p><a href="https://github.com/schlichtanders/IsDef.jl">IsDef.jl</a> exports two functions <code>isdef</code> and <code>Out</code> with which you can dispatch on whether functions are defined or not. (<a href="https://github.com/schlichtanders/IsDef.jl">IsDef.jl</a> is a sub-dependency of WhereTraits.jl, so you should already have it installed). With <code>IsDef.isdef</code>/<code>IsDef.Out</code> and <code>WhereTraits.@traits</code> we can define typesafe dispatch like follows:</p><pre><code class="language-julia hljs">using WhereTraits
+using IsDef
+using Test
+
+struct MyError &lt;: Exception
+  msg::AbstractString
+end
+MyError() = MyError(&quot;&quot;)
+
+@traits typesafe_call(f, a::T) where {T, isdef(f, T)} = f(a)
+# note that you can also use isdef on args directly, like you can use eltype on args
+# however this will be recognized as a different traitfunction compared to isdef(f, T)
+# which can lead to ambiguous overloadings. Just good to keep in mind
+@traits typesafe_call(f, a) where {!isdef(f, a)} = throw(MyError(&quot;given function cannot work with given arg&quot;))
+@code_llvm typesafe_call(x -&gt; x+2, 4)  # looks really good
+
+@test typesafe_call(x -&gt; x+2, 4) == 6
+@test_throws MyError typesafe_call(x -&gt; x+2, &quot;string&quot;)
+
+
+@traits typesafe_out(f, a) where {Out(f, a) &lt;: Number} = f(a) + 6
+@traits typesafe_out(f, a) where {Out(f, a) &lt;: String} = &quot;yeah $(f(a))!&quot;
+@traits typesafe_out(f, a) = throw(MyError(&quot;no match&quot;))
+
+@test typesafe_out(x -&gt; 3x, 1) == 9
+@test typesafe_out(x -&gt; &quot;$x $x&quot;, 1) == &quot;yeah 1 1!&quot;
+@test_throws MyError typesafe_out(x -&gt; convert(Vector, x), 1)
+
+
+# more complex case with dependencies among functions
+@traits function typesafe_aggregate(a::Vector{A}, introduce, combine) where
+    {A, isdef(introduce, A), isdef(combine, Out(introduce, A), Out(introduce, A))}
+
+  reduce(combine, introduce.(a))
+end
+@traits typesafe_aggregate(a::Vector, introduce, combine) = throw(MyError(&quot;TypeError&quot;))
+
+@test typesafe_aggregate([&quot;this&quot;,&quot;is&quot;,&quot;a&quot;,&quot;test&quot;], length, +) == 11
+@test typesafe_aggregate([&quot;this&quot;,&quot;is&quot;,&quot;a&quot;,&quot;test&quot;], length, *) == 32
+@test typesafe_aggregate([&quot;this&quot;,&quot;is&quot;,&quot;a&quot;,&quot;test&quot;], x -&gt; &quot;$x &quot;, *) == &quot;this is a test &quot;
+@test_throws MyError typesafe_aggregate([&quot;this&quot;,&quot;is&quot;,&quot;a&quot;, &quot;test&quot;], x-&gt;x, +)</code></pre><p>This is very powerful. Be warned that <code>IsDef</code> has limitations currently because julia type-inference has limitations. Luckily the type-inference is already very good with concrete-types, which is what we need for dispatch.</p></article><nav class="docs-footer"><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.19 on <span class="colophon-date" title="Saturday 2 July 2022 00:35">Saturday 2 July 2022</span>. Using Julia version 1.7.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

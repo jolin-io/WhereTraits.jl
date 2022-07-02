@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>WhereTraits Details` · WhereTraits.jl</title><script data-outdated-warner src="../assets/warner.js"></script><link rel="canonical" href="https://jolin-io.github.io/WhereTraits.jl/details/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.044/juliamono.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">WhereTraits.jl</a></span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li><span class="tocitem">Manual</span><ul><li><a class="tocitem" href="../usage/">WhereTraits Usage`</a></li><li class="is-active"><a class="tocitem" href>WhereTraits Details`</a><ul class="internal"><li><a class="tocitem" href="#Auto-Documentation"><span>Auto Documentation</span></a></li><li><a class="tocitem" href="#MethodError-handling"><span>MethodError handling</span></a></li><li><a class="tocitem" href="#Implementation-Details"><span>Implementation Details</span></a></li><li><a class="tocitem" href="#Performance-Comparison-with-[mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)"><span>Performance + Comparison with mauro3/SimpleTraits.jl</span></a></li></ul></li><li><a class="tocitem" href="../basictraits/">WhereTraits.BasicTraits</a></li></ul></li><li><a class="tocitem" href="../library/">Library</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Manual</a></li><li class="is-active"><a href>WhereTraits Details`</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>WhereTraits Details`</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/jolin-io/WhereTraits.jl/blob/main/docs/src/details.md#L" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="WhereTraits-Details"><a class="docs-heading-anchor" href="#WhereTraits-Details">WhereTraits Details</a><a id="WhereTraits-Details-1"></a><a class="docs-heading-anchor-permalink" href="#WhereTraits-Details" title="Permalink"></a></h1><h2 id="Auto-Documentation"><a class="docs-heading-anchor" href="#Auto-Documentation">Auto Documentation</a><a id="Auto-Documentation-1"></a><a class="docs-heading-anchor-permalink" href="#Auto-Documentation" title="Permalink"></a></h2><p>The package supports advanced auto-documentation which gives you a good overview about what is defined in a <code>@traits</code> function.</p><p>Let&#39;s consider the following example</p><pre><code class="language-julia hljs">@traits h(a) where {eltype(a) &lt;: Number} = true
+@traits h(a) = false
+h([1.0]) # true
+h([&quot;&quot;]) # false</code></pre><p>then you get nice formatted documentation</p><pre><code class="language-julia hljs">help?&gt; h
+
+  h(a1::T1; kwargs...) where T1
+
+  ––– Original @traits definitions follow –––
+
+  h(a) where eltype(a) &lt;: Number
+
+  Original @traits definition:
+
+  (h(a) where eltype(a) &lt;: Number) = begin
+          #= none:1 =#
+          true
+      end
+
+    •      •      •  
+
+  h(a)
+
+  Original @traits definition:
+
+  h(a) = begin
+          #= none:1 =#
+          false
+      end</code></pre><h2 id="MethodError-handling"><a class="docs-heading-anchor" href="#MethodError-handling">MethodError handling</a><a id="MethodError-handling-1"></a><a class="docs-heading-anchor-permalink" href="#MethodError-handling" title="Permalink"></a></h2><p>Like with normal function dispatch you can also get MethodErrors when using traits.  While the pure MethodError can be helpful for the experienced WhereTraits user, for most it will be rather incomprehensible. This is why WhereTraits catches MethodErrors and  rephrases them in easier to understand <code>TraitsMethodError</code>.</p><p>Here one example</p><pre><code class="language-julia hljs">julia&gt; @traits myfunc(a) where {Base.IteratorSize(a)::Base.HasShape} = 2
+
+julia&gt; myfunc([1])
+2
+
+julia&gt; myfunc(Iterators.countfrom())
+ERROR: TraitsMethodError: no method matching `myfunc(Base.Iterators.Count{Int64}(1, 1))`.
+
+It corresponds to the normal julia-dispatch (aka &quot;outerfunction&quot;)
+</code></pre><p>julia myfunc(a1::T1; kwargs...) where T1</p><pre><code class="nohighlight hljs">
+and the traits (traits are normalized to &lt;:)
+</code></pre><p>julia Core.Typeof(Base.IteratorSize(a1)) &lt;: Base.IsInfinite</p><pre><code class="nohighlight hljs">
+however, the only available traits definitions are:
+
+  *   *   *   *   *   *   *   *   *   *   *   *   *   *
+</code></pre><p>julia myfunc(a) where Base.IteratorSize(a)::Base.HasShape</p><pre><code class="nohighlight hljs">
+which defines the traits (traits are normalized to &lt;:)
+</code></pre><p>julia Core.Typeof(Base.IteratorSize(a1)) &lt;: Base.HasShape</p><pre><code class="nohighlight hljs">
+  *   *   *   *   *   *   *   *   *   *   *   *   *   *
+
+Note the following `&lt;:` standardization of traits:
+
+|        WhereTraits |                               Example |                                   `&lt;:` standardization |
+| ------------------:| -------------------------------------:| ------------------------------------------------------:|
+|         bool trait |                           `iseven(a)` |  `WhereTraits.BoolType(iseven(a)) &lt;: WhereTraits.True` |
+| negated bool trait |                          `!iseven(a)` | `WhereTraits.BoolType(iseven(a)) &lt;: WhereTraits.False` |
+|        `isa` trait | `Base.IteratorSize(a)::Base.HasShape` |   `Core.Typeof(Base.IteratorSize(a)) &lt;: Base.HasShape` |
+|         `&lt;:` trait |            `Base.eltype(a) &lt;: Number` |                             `Base.eltype(a) &lt;: Number` |
+
+Stacktrace:
+ [1] #myfunc#4
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:215 [inlined]
+ [2] myfunc(a1::Base.Iterators.Count{Int64}; kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, NamedTuple{(), Tuple{}}})
+   @ Main ./REPL[10]:0
+ [3] myfunc
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:211 [inlined]
+ [4] myfunc(a1::Base.Iterators.Count{Int64})
+   @ Main ./REPL[10]:0
+ [5] top-level scope
+   @ REPL[12]:1
+
+caused by: MethodError: no method matching myfunc(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, ::Base.Iterators.Count{Int64}, ::&lt;ARGS|TYPEVARS&gt;, ::Type{Base.Iterators.Count{Int64}}, ::&lt;TYPEVARS|TRAITS&gt;, ::Type{Base.IsInfinite})┌ Error: Error showing method candidates, aborted
+│   exception =
+│    could not determine location of method definition
+│    Stacktrace:
+│      [1] error(s::String)
+│        @ Base ./error.jl:33
+│      [2] functionloc
+│        @ ./methodshow.jl:164 [inlined]
+│      [3] show_method_candidates(io::IOContext{Base.TTY}, ex::MethodError, kwargs::Any)
+│        @ Base ./errorshow.jl:499
+│      [4] showerror(io::IOContext{Base.TTY}, ex::MethodError)
+│        @ Base ./errorshow.jl:318
+│      [5] showerror(io::IOContext{Base.TTY}, ex::MethodError, bt::Vector{Base.StackTraces.StackFrame}; backtrace::Bool)
+│        @ Base ./errorshow.jl:88
+│      [6] show_exception_stack(io::IOContext{Base.TTY}, stack::Vector{Any})
+│        @ Base ./errorshow.jl:866
+│      [7] display_error(io::IOContext{Base.TTY}, stack::Base.ExceptionStack)
+│        @ Base ./client.jl:104
+│      [8] #invokelatest#2
+│        @ ./essentials.jl:716 [inlined]
+│      [9] invokelatest
+│        @ ./essentials.jl:714 [inlined]
+│     [10] print_response(errio::IO, response::Any, show_value::Bool, have_color::Bool, specialdisplay::Union{Nothing, AbstractDisplay})
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:286
+│     [11] (::REPL.var&quot;#45#46&quot;{REPL.LineEditREPL, Pair{Any, Bool}, Bool, Bool})(io::Any)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:275
+│     [12] with_repl_linfo(f::Any, repl::REPL.LineEditREPL)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:508
+│     [13] print_response(repl::REPL.AbstractREPL, response::Any, show_value::Bool, have_color::Bool)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:273
+│     [14] (::REPL.var&quot;#do_respond#66&quot;{Bool, Bool, REPL.var&quot;#77#87&quot;{REPL.LineEditREPL, REPL.REPLHistoryProvider}, REPL.LineEditREPL, REPL.LineEdit.Prompt})(s::REPL.LineEdit.MIState, buf::Any, ok::Bool)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:844
+│     [15] #invokelatest#2
+│        @ ./essentials.jl:716 [inlined]
+│     [16] invokelatest
+│        @ ./essentials.jl:714 [inlined]
+│     [17] run_interface(terminal::REPL.Terminals.TextTerminal, m::REPL.LineEdit.ModalInterface, s::REPL.LineEdit.MIState)
+│        @ REPL.LineEdit /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/LineEdit.jl:2493
+│     [18] run_frontend(repl::REPL.LineEditREPL, backend::REPL.REPLBackendRef)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:1230
+│     [19] (::REPL.var&quot;#49#54&quot;{REPL.LineEditREPL, REPL.REPLBackendRef})()
+│        @ REPL ./task.jl:423
+└ @ Base errorshow.jl:320
+
+Stacktrace:
+ [1] myfunc(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1::Base.Iterators.Count{Int64}, ::&lt;ARGS|TYPEVARS&gt;, T1::Type, ::&lt;TYPEVARS|TRAITS&gt;, &#39;trait_1_Base.IteratorSize(a1)&#39;::Type; kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, NamedTuple{(), Tuple{}}})
+   @ Main ./none:0
+ [2] myfunc(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1::Base.Iterators.Count{Int64}, ::&lt;ARGS|TYPEVARS&gt;, T1::Type, ::&lt;TYPEVARS|TRAITS&gt;, &#39;trait_1_Base.IteratorSize(a1)&#39;::Type)
+   @ Main ./none:0
+ [3] #myfunc#4
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:212 [inlined]
+ [4] myfunc(a1::Base.Iterators.Count{Int64}; kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, NamedTuple{(), Tuple{}}})
+   @ Main ./REPL[10]:0
+ [5] myfunc
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:211 [inlined]
+ [6] myfunc(a1::Base.Iterators.Count{Int64})
+   @ Main ./REPL[10]:0
+ [7] top-level scope
+   @ REPL[12]:1</code></pre><p>The error now states clearly that the demanded trait <code>Core.Typeof(Base.IteratorSize(a1)) &lt;: Base.IsInfinite</code> is not defined yet. Internally within WhereTraits all traits (bool traits, <code>::</code>-traits and <code>&lt;:</code>-traits) are normalized to <code>&lt;:</code>-traits.</p><p>To fix this implementation you would add a definition with the trait <code>Base.IteratorSize(a1)::Base.IsInfinite</code>.</p><hr/><p>A second example is about a typo: Here the value-level <code>::</code> trait is confused with the type-level <code>&lt;:</code> Trait.</p><pre><code class="language-julia hljs">julia&gt; @traits myfunc2(a) where {Base.IteratorSize(a) &lt;: Base.HasShape} = 2  # wrong!! it should be `Base.IteratorSize(a)::Base.HasShape`
+
+julia&gt; myfunc2([1])
+ERROR: TraitsMethodError: no method matching `myfunc2([1])`.
+
+It corresponds to the normal julia-dispatch (aka &quot;outerfunction&quot;)
+</code></pre><p>julia myfunc2(a1::T1; kwargs...) where T1</p><pre><code class="nohighlight hljs">
+and the traits (traits are normalized to &lt;:)
+</code></pre><p>julia Base.IteratorSize(a1) &lt;: Base.HasShape{1}()</p><pre><code class="nohighlight hljs">
+however, the only available traits definitions are:
+
+  *   *   *   *   *   *   *   *   *   *   *   *   *   *
+</code></pre><p>julia myfunc2(a) where Base.IteratorSize(a) &lt;: Base.HasShape</p><pre><code class="nohighlight hljs">
+which defines the traits (traits are normalized to &lt;:)
+</code></pre><p>julia Base.IteratorSize(a1) &lt;: Base.HasShape</p><pre><code class="nohighlight hljs">
+  *   *   *   *   *   *   *   *   *   *   *   *   *   *
+
+Note the following `&lt;:` standardization of traits:
+
+|        WhereTraits |                               Example |                                   `&lt;:` standardization |
+| ------------------:| -------------------------------------:| ------------------------------------------------------:|
+|         bool trait |                           `iseven(a)` |  `WhereTraits.BoolType(iseven(a)) &lt;: WhereTraits.True` |
+| negated bool trait |                          `!iseven(a)` | `WhereTraits.BoolType(iseven(a)) &lt;: WhereTraits.False` |
+|        `isa` trait | `Base.IteratorSize(a)::Base.HasShape` |   `Core.Typeof(Base.IteratorSize(a)) &lt;: Base.HasShape` |
+|         `&lt;:` trait |            `Base.eltype(a) &lt;: Number` |                             `Base.eltype(a) &lt;: Number` |
+
+Stacktrace:
+ [1] #myfunc2#6
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:215 [inlined]
+ [2] myfunc2(a1::Vector{Int64}; kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, NamedTuple{(), Tuple{}}})
+   @ Main ./REPL[13]:0
+ [3] myfunc2
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:211 [inlined]
+ [4] myfunc2(a1::Vector{Int64})
+   @ Main ./REPL[13]:0
+ [5] top-level scope
+   @ REPL[14]:1
+
+caused by: MethodError: no method matching myfunc2(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, ::Vector{Int64}, ::&lt;ARGS|TYPEVARS&gt;, ::Type{Vector{Int64}}, ::&lt;TYPEVARS|TRAITS&gt;, ::Base.HasShape{1})┌ Error: Error showing method candidates, aborted
+│   exception =
+│    could not determine location of method definition
+│    Stacktrace:
+│      [1] error(s::String)
+│        @ Base ./error.jl:33
+│      [2] functionloc
+│        @ ./methodshow.jl:164 [inlined]
+│      [3] show_method_candidates(io::IOContext{Base.TTY}, ex::MethodError, kwargs::Any)
+│        @ Base ./errorshow.jl:499
+│      [4] showerror(io::IOContext{Base.TTY}, ex::MethodError)
+│        @ Base ./errorshow.jl:318
+│      [5] showerror(io::IOContext{Base.TTY}, ex::MethodError, bt::Vector{Base.StackTraces.StackFrame}; backtrace::Bool)
+│        @ Base ./errorshow.jl:88
+│      [6] show_exception_stack(io::IOContext{Base.TTY}, stack::Vector{Any})
+│        @ Base ./errorshow.jl:866
+│      [7] display_error(io::IOContext{Base.TTY}, stack::Base.ExceptionStack)
+│        @ Base ./client.jl:104
+│      [8] #invokelatest#2
+│        @ ./essentials.jl:716 [inlined]
+│      [9] invokelatest
+│        @ ./essentials.jl:714 [inlined]
+│     [10] print_response(errio::IO, response::Any, show_value::Bool, have_color::Bool, specialdisplay::Union{Nothing, AbstractDisplay})
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:286
+│     [11] (::REPL.var&quot;#45#46&quot;{REPL.LineEditREPL, Pair{Any, Bool}, Bool, Bool})(io::Any)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:275
+│     [12] with_repl_linfo(f::Any, repl::REPL.LineEditREPL)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:508
+│     [13] print_response(repl::REPL.AbstractREPL, response::Any, show_value::Bool, have_color::Bool)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:273
+│     [14] (::REPL.var&quot;#do_respond#66&quot;{Bool, Bool, REPL.var&quot;#77#87&quot;{REPL.LineEditREPL, REPL.REPLHistoryProvider}, REPL.LineEditREPL, REPL.LineEdit.Prompt})(s::REPL.LineEdit.MIState, buf::Any, ok::Bool)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:844
+│     [15] #invokelatest#2
+│        @ ./essentials.jl:716 [inlined]
+│     [16] invokelatest
+│        @ ./essentials.jl:714 [inlined]
+│     [17] run_interface(terminal::REPL.Terminals.TextTerminal, m::REPL.LineEdit.ModalInterface, s::REPL.LineEdit.MIState)
+│        @ REPL.LineEdit /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/LineEdit.jl:2493
+│     [18] run_frontend(repl::REPL.LineEditREPL, backend::REPL.REPLBackendRef)
+│        @ REPL /nix/store/qmlbjq46nhn1v08nnb23y2myrvra8hm7-julia-bin-1.7.1/share/julia/stdlib/v1.7/REPL/src/REPL.jl:1230
+│     [19] (::REPL.var&quot;#49#54&quot;{REPL.LineEditREPL, REPL.REPLBackendRef})()
+│        @ REPL ./task.jl:423
+└ @ Base errorshow.jl:320
+
+Stacktrace:
+ [1] myfunc2(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1::Vector{Int64}, ::&lt;ARGS|TYPEVARS&gt;, T1::Type, ::&lt;TYPEVARS|TRAITS&gt;, &#39;trait_1_Base.IteratorSize(a1)&#39;::Base.HasShape{1}; kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, NamedTuple{(), Tuple{}}})
+   @ Main ./none:0
+ [2] myfunc2(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1::Vector{Int64}, ::&lt;ARGS|TYPEVARS&gt;, T1::Type, ::&lt;TYPEVARS|TRAITS&gt;, &#39;trait_1_Base.IteratorSize(a1)&#39;::Base.HasShape{1})
+   @ Main ./none:0
+ [3] #myfunc2#6
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:212 [inlined]
+ [4] myfunc2(a1::Vector{Int64}; kwargs::Base.Pairs{Symbol, Union{}, Tuple{}, NamedTuple{(), Tuple{}}})
+   @ Main ./REPL[13]:0
+ [5] myfunc2
+   @ ~/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:211 [inlined]
+ [6] myfunc2(a1::Vector{Int64})
+   @ Main ./REPL[13]:0
+ [7] top-level scope
+   @ REPL[14]:1</code></pre><h2 id="Implementation-Details"><a class="docs-heading-anchor" href="#Implementation-Details">Implementation Details</a><a id="Implementation-Details-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation-Details" title="Permalink"></a></h2><p>The implementations uses only code-rewrite, creating two nested functions out of the one <code>@traits</code> function. The outer function dispatches as normal, the inner function dispatches on the added traits functionality.</p><p>To inspect what is going on it is helpful to turn off the auto_documentation feature by setting</p><pre><code class="language-julia hljs">WhereTraits.CONFIG.auto_documentation = false</code></pre><p>After this the macroexpand is simpler to understand</p><pre><code class="language-julia hljs">@macroexpand @traits foo(a) where {isodd(a)} = (a+1)/2</code></pre><p>which gives the following code</p><pre><code class="language-julia hljs">function foo(a1::T1; kwargs...) where T1
+    #= REPL[6]:1 =#
+    #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:211 =#
+    try
+        #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:212 =#
+        (Main).foo(WhereTraits.InternalState.TraitsDisambiguationSingleton(), Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1, a1, &lt;ARGS|TYPEVARS&gt;(), T1, &lt;TYPEVARS|TRAITS&gt;(), (WhereTraits.Utils.BoolTypes.BoolType)(isodd(a1)); kwargs...)
+    catch exc
+        #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:214 =#
+        (WhereTraits.InternalState.isWhereTraitsMethodError)(exc) || rethrow()
+        #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:215 =#
+        throw((WhereTraitsMethodError)(exc))
+    end
+end
+function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a, ::&lt;ARGS|TYPEVARS&gt;, var&quot;&#39;T1&#39;&quot;::Any, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;isodd(a1)&#39;&quot;::Type{&lt;:WhereTraits.Utils.BoolTypes.True})
+    #= REPL[6]:1 =#
+    (a + 1) / 2
+end
+function foo(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1, ::&lt;ARGS|TYPEVARS&gt;, T1, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;trait_1_isodd(a1)&#39;&quot;::Any; kwargs...)
+    (Main).foo(WhereTraits.InternalState.TraitsDefSingleton(), Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1, a1, &lt;ARGS|TYPEVARS&gt;(), T1, &lt;TYPEVARS|TRAITS&gt;(), var&quot;&#39;trait_1_isodd(a1)&#39;&quot;; kwargs...)
+end
+nothing
+function foo(::WhereTraits.InternalState.TraitsStoreSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1})
+    #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:76 =#
+    #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:77 =#
+    WhereTraits.InternalState.TraitsStore{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, Any}}(WhereTraits.InternalState.DefOuterFunc{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, Any}}(WhereTraits.InternalState.DefOuterFuncFixedPart{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, Any}}(Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1, Main, :foo, Union{Expr, Symbol}[], ExprParsers.Arg_Parsed[EP.Arg_Parsed(name=:a1, type=:T1, default=ExprParsers.NoDefault())], ExprParsers.TypeRange_Parsed[EP.TypeRange_Parsed(lb=Union{}, name=:T1, ub=Any)], [:a1], [:T1]), WhereTraits.InternalState.DefOuterFuncNonFixedPart(Union{Expr, Symbol}[:(isodd(a1))], Dict{Union{Expr, Symbol}, Union{Expr, Symbol}}(:(isodd(a1)) =&gt; :((WhereTraits.Utils.BoolTypes.BoolType)(isodd(a1)))))), Dict{WhereTraits.InternalState.DefInnerFuncFixedPart, WhereTraits.InternalState.DefInnerFuncNonFixedPart}(WhereTraits.InternalState.DefInnerFuncFixedPart(Dict(:a1 =&gt; :a), Dict{Symbol, Symbol}(), Dict{Union{Expr, Symbol}, Union{Expr, Symbol}}(:(isodd(a1)) =&gt; :(::Type{&lt;:WhereTraits.Utils.BoolTypes.True}))) =&gt; WhereTraits.InternalState.DefInnerFuncNonFixedPart(Main, Expr[], quote
+        #= REPL[6]:1 =#
+        (a + 1) / 2
+    end, :((foo(a) where isodd(a)) = begin
+        #= REPL[6]:1 =#
+        (a + 1) / 2
+    end))), WhereTraits.InternalState.DefDisambiguation({1, 0} directed Int64 metagraph with Float64 weights defined by :weight (default weight 1.0)))
+end
+nothing</code></pre><p>It is actually easy to understand on a high level:</p><ol><li>The first function <code>function foo(a1::T1; kwargs...) where T1</code> is the so called &quot;outer&quot; function which does all the normal standard Julia dispatch. It is the necessary initial entry point in order to then perform a subsequent call to further dispatch on traits.</li></ol><p>In the function body, within a try-catch, you see that this outer function extracts extra information according to the extended where-syntax. Lets go through the arguments one by one</p><ol><li><code>WhereTraits.InternalState.TraitsDisambiguationSingleton()</code> is a helper type indicating that this is a call to the traits disambiguation layer</li><li><code>Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1</code> is the complete function signature of the outer function, with an additional helper <code>&lt;CURLIES|SIGNATURE|ARGS&gt;</code>, which is actually a <code>WhereTraits.Parsing.Normalize._BetweenCurliesAndArgs</code> to deal with TypeParameters of UnionAll types (whereupon which you can also define function calls and hence <code>@traits</code>)</li><li><code>a1</code> is the first actual argument (after this <code>a2</code>, <code>a3</code> and etc. could follow in principle)</li><li><code>&lt;ARGS|TYPEVARS&gt;()</code> is actually a <code>WhereTraits.InternalState.ArgsHelpers_BetweenArgsAndTypeVars()</code>, which is again a helper type to distinguish args from typevariables</li><li><code>T1</code> is a type parameter (again here <code>T2</code>, <code>T3</code>, etc. would follow if there are more typeparameters)</li><li><code>&lt;TYPEVARS|TRAITS&gt;()</code> is actually a <code>WhereTraits.InternalState.ArgsHelpers_BetweenTypeVarsAndTraits()</code>, which is another helper, now separating the traits definitions</li><li><code>(WhereTraits.Utils.BoolTypes.BoolType)(isodd(a1))</code> here comes our first actual trait definition (if you define more traits, they would follow here), it is a bool definition and uses the special function BoolType to bring bool values to BoolTypes.</li><li><code>; kwargs...</code> at last all kwargs are just passed through (dispatch on kwargs is not yet supported)</li></ol><p>All these arguments are finally passed on to the inner function, which is defined next. (For completeness, there is an intermediate disambiguation layer, which is sitting between outer function and inner function. It will be described shortly after.)</p><ol><li>The second function is this inner function <code>function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a, ::&lt;ARGS|TYPEVARS&gt;, var&quot;&#39;T1&#39;&quot;::Any, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;isodd(a1)&#39;&quot;::Type{&lt;:WhereTraits.Utils.BoolTypes.True})</code>.</li></ol><p>Here we define the actual full traits dispatch which was just called in the outer function (we ignore the disambiguation layer for now). Let&#39;s again go through each single argument:</p><ol><li><code>::WhereTraits.InternalState.TraitsDefSingleton</code> dispatches on the singleton type for an inner-function-definition.</li><li><code>::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}</code> dispatches on the signature of the outer function, again adding support for types with Type-parameters which is why you see this extra type <code>&lt;CURLIES|SIGNATURE|ARGS&gt;</code> (which is actually a <code>WhereTraits.Syntax.Parsing.Normalize._BetweenCurliesAndArgs</code>). If you would have dispatch for say <code>function MyType{Int, Bool}(a::Any, b::Any)</code> this would look like <code>::Type{Tuple{Int, Bool, &lt;CURLIES|SIGNATURE|ARGS&gt;, T1, T2} where {T1, T2}}</code> respectively</li><li><code>a</code> is just the standard argument, which was of type <code>Any</code>.</li></ol><pre><code class="nohighlight hljs">Hereafter, other arguments would follow.</code></pre><ol><li><code>::&lt;ARGS|TYPEVARS&gt;</code> (which is actually a <code>::WhereTraits.InternalState.ArgsHelper_BetweenArgsAndTypeVars</code>) is again a helper for dispatch separation</li><li><code>var&quot;&#39;T1&#39;&quot;::Any</code> corresponds to the normal standard TypeParameter, here of type Any.</li></ol><pre><code class="nohighlight hljs">It was renamed into `var&quot;&#39;T1&#39;&quot;`, because it is actually nowhere used in the function body. If you would have used the TypeVariable `T1`, it is named plainly `T1`.
+This was implemented because the syntax actually may have to add extra typeparameters, which then for sure are not used by the code. We distinguish used/unused typeparameters for better debugging/inspecting.
+
+Hereafter, other standard type parameters would follow.</code></pre><ol><li><p><code>::&lt;TYPEVARS|TRAITS&gt;</code> (actually <code>::WhereTraits.InternalState.ArgsHelper_BetweenTypeVarsAndTraits</code>) is the last helper for dispatch separation</p></li><li><p><code>var&quot;&#39;isodd(a1)&#39;&quot;::Type{&lt;:WhereTraits.Utils.BoolTypes.True}</code> is our extended where-dispatch for Bool function</p><p>As the argument was wrapped into BoolTypes.BoolType, we can now dispatch on <code>BoolTypes.True</code>. The name is extra descriptive and refers to the precise function call which happens in the outer function. This can be helpful for debugging and inspecting.</p></li><li><p>This function does not define any keyword arguments.</p></li><li><p>The third function is the disambiguation, which sits between outer function and inner function. In our case it only forwards the arguments to the inner function, but in general this layer implements the functionality of <code>@traits_order</code>. </p></li><li><p>The last complex looking function is <code>function foo(::WhereTraits.InternalState.TraitsStoreSingleton)</code>. Concretely, it defines the hidden state which is needed to correctly construct the outer and inner functions required to realise the extended dispatch of <code>@traits</code>. You don&#39;t have to understand it, still you hopefully get the feeling that everything is there.</p></li><li><p>Finally there is <code>nothing</code> in order to prevent printing possibly confusing internal details.</p></li></ol><p>If you try <code>@macroexpand @traits foo(a) where {!isodd(a)} = a/2</code> instead, you will see that it is very similar, but dispatching on <code>::BoolTypes.False</code> instead. This is part of the special support for bool function.</p><p>Also try <code>@macroexpand @traits foo(a) where {iseven(a)} = a/2</code> and see what the syntax does differently.</p><hr/><p>Now execute</p><pre><code class="language-julia hljs">@traits foo(a) where {isodd(a)} = (a+1)/2</code></pre><p>and repeat inspecting <code>@macroexpand @traits foo(a) where {!isodd(a)} = a/2</code> vs <code>@macroexpand @traits foo(a) where {iseven(a)} = a/2</code>.</p><p>Also try inspecting methods with other outerfunctions, like <code>@macroexpand @traits foo(a, b) = a + b</code>. You will start appreciating the hidden complexity behind the <code>@traits</code> syntax.</p><p>While the syntax mapping to an outerfunction and respective innerfunctions feels very intuitive, the needed implementation is surprisingly complicated. Luckily, all this is encapsulated nicely in the <code>@traits</code> macro. Enjoy!</p><hr/><p>If you ever are curious what the whole implementation of your <code>@traits</code> function is, there is a helper macro <code>@traits_show_implementation</code>. For instance if you finally defined</p><pre><code class="language-julia hljs">@traits foo(a) where {isodd(a)} = (a+1)/2
+@traits foo(a) where {!isodd(a)} = a/2</code></pre><p><code>@traits_show_implementation</code> will give you the full implementation, omitting the internal state.</p><pre><code class="language-juliarepl hljs">julia&gt; @traits_show_implementation foo
+  Outer function for signature Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1
+
+  function foo(a1::T1; kwargs...) where T1
+      #= REPL[9]:1 =#
+      begin
+          #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:211 =#
+          try
+              #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:212 =#
+              (Main).foo(WhereTraits.InternalState.TraitsDisambiguationSingleton(), Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1, a1, &lt;ARGS|TYPEVARS&gt;(), T1, &lt;TYPEVARS|TRAITS&gt;(), (WhereTraits.Utils.BoolTypes.BoolType)(isodd(a1)); kwargs...)
+          catch exc
+              #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:214 =#
+              (WhereTraits.InternalState.isWhereTraitsMethodError)(exc) || rethrow()
+              #= /home/ssahm/.julia/dev/WhereTraits/src/Syntax/Rendering.jl:215 =#
+              throw((WhereTraitsMethodError)(exc))
+          end
+      end
+  end)
+
+    •  • •
+
+  Inner functions for signature Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1
+
+  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a, ::&lt;ARGS|TYPEVARS&gt;, var&quot;&#39;T1&#39;&quot;::Any, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;isodd(a1)&#39;&quot;::Type{&lt;:WhereTraits.Utils.BoolTypes.True})
+      #= REPL[7]:1 =#
+      (a + 1) / 2
+  end
+
+    •  • •
+
+  function foo(::WhereTraits.InternalState.TraitsDefSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a, ::&lt;ARGS|TYPEVARS&gt;, var&quot;&#39;T1&#39;&quot;::Any, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;isodd(a1)&#39;&quot;::Type{&lt;:WhereTraits.Utils.BoolTypes.False})
+      #= REPL[8]:1 =#
+      a / 2
+  end
+
+    •  • •
+
+    •  • •
+
+  Disambiguation functions for signature Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1
+
+  Base.delete_method(foo(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1, ::&lt;ARGS|TYPEVARS&gt;, T1, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;trait_1_isodd(a1)&#39;&quot;; kwargs...) in Main)
+
+    •  • •
+
+  function foo(::WhereTraits.InternalState.TraitsDisambiguationSingleton, ::Type{Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1}, a1, ::&lt;ARGS|TYPEVARS&gt;, T1, ::&lt;TYPEVARS|TRAITS&gt;, var&quot;&#39;trait_1_isodd(a1)&#39;&quot;::Any; kwargs...)
+      (Main).foo(WhereTraits.InternalState.TraitsDefSingleton(), Tuple{&lt;CURLIES|SIGNATURE|ARGS&gt;, T1} where T1, a1, &lt;ARGS|TYPEVARS&gt;(), T1, &lt;TYPEVARS|TRAITS&gt;(), var&quot;&#39;trait_1_isodd(a1)&#39;&quot;; kwargs...)
+  end
+
+    •  • •
+
+  ──────────────────────────────────────────────────────────────────────────────────────</code></pre><h2 id="Performance-Comparison-with-[mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)"><a class="docs-heading-anchor" href="#Performance-Comparison-with-[mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)">Performance + Comparison with <a href="https://github.com/mauro3/SimpleTraits.jl">mauro3/SimpleTraits.jl</a></a><a id="Performance-Comparison-with-[mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Comparison-with-[mauro3/SimpleTraits.jl](https://github.com/mauro3/SimpleTraits.jl)" title="Permalink"></a></h2><p>For a high-level comparison between <code>WhereTraits.@traits</code> and <code>SimpleTraits.jl</code> see the respective <a href="https://discourse.julialang.org/t/announcing-traits-jl-a-revival-of-julia-traits/35683/5">discourse discussion</a>.</p><p>The following examples mirror <a href="https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch">https://github.com/mauro3/SimpleTraits.jl#details-of-method-dispatch</a>. We start with defining a custom function <code>fn</code>, a custom Trait function <code>isTr</code> and some methods for <code>fn</code> dispatching on the trait.</p><pre><code class="language-julia hljs">isTr(_) = false
+
+fn(x::Integer) = 1
+@traits fn(x::X) where {X&lt;:AbstractFloat, isTr(X)} = 2
+@traits fn(x::AbstractFloat) = 3
+
+fn(Float32(5)) # 3; dispatch through traits, but isTr not yet defined, hence using default case
+
+isTr(::Type{Float32}) = true
+isTr(::Type{Int}) = true
+
+fn(5) # 1; dispatch only happens on the type
+fn(Float32(5)) # 2; dispatch through traits
+fn(Float64(5)) # 3; default dispatch through traits
+
+
+isTr2(_) = false
+isTr2(::Type{Float16}) = true
+@traits fn(x::X) where {X &lt;: AbstractFloat, isTr2(X)} = 4
+
+fn(Float16(5)) # 4; dispatch through traits
+fn(Float32(5)) # 2; NO MethodError; nothing is overwritten, everything works like you would hope for</code></pre><p>Finally the performance test: Julia is indeed inferring the very same native code.</p><pre><code class="language-julia-repl hljs">julia&gt; @code_native fn(5)
+    .section    __TEXT,__text,regular,pure_instructions
+; ┌ @ none:1 within `fn&#39;
+    movl    $1, %eax
+    retq
+    nopw    %cs:(%rax,%rax)
+; └
+julia&gt; @code_native fn(Float16(5))
+    .section    __TEXT,__text,regular,pure_instructions
+; ┌ @ none:1 within `fn&#39;
+    movl    $4, %eax
+    retq
+    nopw    %cs:(%rax,%rax)
+; └</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../usage/">« WhereTraits Usage`</a><a class="docs-footer-nextpage" href="../basictraits/">WhereTraits.BasicTraits »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.19 on <span class="colophon-date" title="Saturday 2 July 2022 00:35">Saturday 2 July 2022</span>. Using Julia version 1.7.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
