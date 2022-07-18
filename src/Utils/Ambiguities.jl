@@ -22,9 +22,13 @@ abstract type AbstractAmbiguity end
 struct NoAmbiguity <: AbstractAmbiguity end
 
 @struct_hash_equal @kwdef struct Ambiguity <: AbstractAmbiguity
+    # all possible indices which point to the compared dispatches
     indices::Vector{Int}
-    mostspecific::Vector{Vector{Int64}}  # when comparing multiple dispatches there might be non-unique most-specific
-    dispatch_resolution::Vector{Type}  # only upperbounds
+    # when comparing multiple dispatches there might be non-unique most-specific dispatches
+    # mostspecific stores for every upperbound a Vector of indices pointing to the respective most-specific dispatches
+    mostspecific::Vector{Vector{Int64}}
+    # only upperbounds
+    dispatch_resolution::Vector{Type}
 end
 
 function Base.isless(a::Ambiguity, b::Ambiguity)

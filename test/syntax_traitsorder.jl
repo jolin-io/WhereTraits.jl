@@ -25,6 +25,7 @@ end
 @test conflict([1], [[2,3], []]) == 3
 
 
+# TODO complex test where the recursion of the `resolve` method is important
 
 
 # module Test
