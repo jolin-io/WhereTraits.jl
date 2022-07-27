@@ -55,7 +55,7 @@ And all this works with arbitrary many where expressions and creates optimal cod
 
 `WhereTraits` comes with special support for resolving ambiguities among traits dispatch. 
 
-Under the hood `@traits` uses normal function dispatch to acchieve the speed and flexibility, however, julia function dispatch can lead to disambiguities. With traits these can easily happen if someone defines `@traits` for the same standard dispatch but using different traits. Let's take a look how this looks like
+Under the hood `@traits` uses normal function dispatch to achieve the speed and flexibility, however, julia function dispatch can lead to ambiguities. With traits these can easily happen if someone defines `@traits` for the same standard dispatch but using different traits. Let's take a look how this looks like
 
 ```julia
 using WhereTraits
