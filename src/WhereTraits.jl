@@ -2,10 +2,8 @@ module WhereTraits
 export @traits, @traits_order, @traits_test, @traits_store, @traits_show_implementation
 export WhereTraitsException, WhereTraitsAmbiguityError, WhereTraitsMethodError
 
-using Compat
-
-@Base.kwdef mutable struct _Config
-  auto_documentation::Bool = true
+Base.@kwdef mutable struct _Config
+    auto_documentation::Bool = true
 end
 # TODO documentation of struct fields does not seem to work - hence we document the constant instead
 

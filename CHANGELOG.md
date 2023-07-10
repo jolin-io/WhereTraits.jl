@@ -5,12 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.1.2] - 2023-07-10
 ### Changed
-- Compat compat now includes version 4
+- removed Compat
+- upgraded Setfield dependency to include version 1
 
 ## [1.1.1] - 2022-07-01
 ### Added
-- in case of a MethodError, a `WhereTraitsMethodError` is thrown instead which adds 
+- in case of a MethodError, a `WhereTraitsMethodError` is thrown instead which adds
   detailed information about the available traits.
 - `UndefVarError` is thrown if variables are used within the traits definition which are
   obvious typos.
@@ -20,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `@traits_order` macro was added for resolving ambiguity among traits definition in a explicit way
-- nice error reporting in case a traits ambiguity is found, including concrete `@traits_order` suggestion 
+- nice error reporting in case a traits ambiguity is found, including concrete `@traits_order` suggestion
 - the underlying ambiguity handling was implemented respectively
 
 ### Changed
