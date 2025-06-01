@@ -1,6 +1,7 @@
 module DocsHelpers
 export @doc_signature, isnodocumentationfound, mygetdoc
 using Markdown
+import REPL
 
 """
 checks whether doc string is the default "No documentation found."
@@ -49,7 +50,7 @@ function mygetdoc(binding::Base.Docs.Binding, sig::Type = Union{})
         nothing
     else
         # Get parsed docs and concatenate them.
-        md = Base.Docs.catdoc(map(Base.Docs.parsedoc, results)...)
+        md = Base.Docs.catdoc(map(REPL.parsedoc, results)...)
         # Save metadata in the generated markdown.
         if isa(md, Markdown.MD)
             md.meta[:results] = results
